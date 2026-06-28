@@ -1,0 +1,15 @@
+[package]
+name = "torna-cpi"
+version = "0.1.0"
+edition = "2021"
+
+# On-chain CPI helpers: let a Solana program drive Torna's hot path (InsertFast /
+# UpdateFast / DeleteFast) by forwarding the client-resolved accounts and signing as
+# a book-authority PDA. The generalized, reusable form of sbf/src/probe/probe.c.
+# This is a library crate (linked into programs), not a deployable program.
+
+[lib]
+crate-type = ["lib"]
+
+[dependencies]
+solana-program = "3.0"

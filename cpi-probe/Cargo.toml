@@ -1,0 +1,15 @@
+[package]
+name = "torna-cpi-probe"
+version = "0.1.0"
+edition = "2021"
+
+# Minimal Rust program that drives Torna InsertFast via the torna-cpi crate, signing
+# as a ["book"] PDA. Proves the integrator-facing Rust CPI path end to end (the Rust
+# analog of sbf/src/probe/probe.c). Seed of the orderbook reference program.
+
+[lib]
+crate-type = ["cdylib", "lib"]
+
+[dependencies]
+solana-program = "3.0"
+torna-cpi = { path = "../cpi" }

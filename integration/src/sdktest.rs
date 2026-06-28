@@ -106,6 +106,23 @@ fn main() {
     send!(ix).expect("insert_fast");
     check!(find!(7) == (true, 0x5C), "SDK InsertFast re-added the key");
 
+    // cold-path Delete via SDK (rebalances; the SDK resolves the siblings the engine needs)
+    for n in [2u32, 4, 6, 8] {
+        let ix = resolve!(|r| tree.delete_ix(r, me, &k32(n)).unwrap());
+        send!(ix).unwrap_or_else(|e| panic!("delete {n}: {e}"));
+    }
+    check!(!find!(2).0 && !find!(8).0, "SDK cold Delete removed keys");
+    check!(find!(1).0 && find!(3).0 && find!(9).0, "SDK cold Delete kept the others");
+    {
+        let r = SvmReader(&svm);
+        let keys: Vec<u32> = tree.scan(&r, 100).iter()
+            .map(|(k, _)| u32::from_be_bytes(k[28..32].try_into().unwrap())).collect();
+        let mut sorted = keys.clone(); sorted.sort();
+        check!(keys == sorted && !keys.is_empty(), "SDK cold Delete kept global order");
+        let alt = tree.scan_accounts(&r, 100);
+        check!(alt.len() >= 2 && alt[0] == tree.header_pda().0, "SDK scan_accounts lists header + leaves (for ALT)");
+    }
+
     println!("sdktest (PathPlanner vs real engine): pass={pass} fail={fail} -> {}",
              if fail == 0 { "ALL PASS" } else { "FAILURES" });
     std::process::exit(if fail == 0 { 0 } else { 1 });

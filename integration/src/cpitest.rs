@@ -22,7 +22,7 @@ const TID: u32 = 1;
 
 fn k32(n: u32) -> [u8; 32] { let mut k = [0u8; 32]; k[28..32].copy_from_slice(&n.to_be_bytes()); k }
 
-struct Env { svm: LiteSVM, torna: Pubkey, probe: Pubkey }
+struct Env { svm: LiteSVM, torna: Pubkey, probe: Pubkey, rust_probe: Pubkey }
 
 impl Env {
     fn pda_hdr(&self, c: &Pubkey) -> (Pubkey, u8) {
@@ -141,12 +141,16 @@ impl Env {
 fn main() {
     let torna_bytes = std::fs::read("../sbf/out/torna.so").expect("torna.so (make sbf)");
     let probe_bytes = std::fs::read("../sbf/out/probe.so").expect("probe.so (make probe)");
+    let rust_probe_bytes = std::fs::read("../cpi-probe/target/deploy/torna_cpi_probe.so")
+        .expect("torna_cpi_probe.so (cargo build-sbf in torna/cpi-probe)");
     let torna = Pubkey::new_unique();
     let probe = Pubkey::new_unique();
+    let rust_probe = Pubkey::new_unique();
     let mut svm = LiteSVM::new();
     svm.add_program(torna, &torna_bytes).unwrap();
     svm.add_program(probe, &probe_bytes).unwrap();
-    let mut env = Env { svm, torna, probe };
+    svm.add_program(rust_probe, &rust_probe_bytes).unwrap();
+    let mut env = Env { svm, torna, probe, rust_probe };
 
     let k = Keypair::new();
     env.svm.airdrop(&k.pubkey(), 1_000_000_000_000).unwrap();
@@ -203,6 +207,38 @@ fn main() {
         let ix = Instruction::new_with_bytes(env.probe, &d, metas);
         check!(env.run(&k, ix).is_ok(), "ProxyInsertFast via book-PDA authority succeeds");
         check!(env.find(&k, 25), "proxied key landed in the book");
+    }
+
+    // ---- Rust CPI path: a Rust program (using the torna-cpi crate) drives Torna ----
+    {
+        let k2 = Keypair::new();
+        env.svm.airdrop(&k2.pubkey(), 1_000_000_000_000).unwrap();
+        let c2 = k2.pubkey();
+        env.init(&k2);
+        for key_n in [10u32, 20, 30] { env.insert(&k2, key_n); }
+        let (rbook, rbump) = Pubkey::find_program_address(&[b"book"], &env.rust_probe);
+        let (hdr2, _) = env.pda_hdr(&c2);
+        // transfer the book authority to the Rust probe's ["book"] PDA
+        let mut d = vec![11u8]; d.extend_from_slice(rbook.as_ref());
+        let ta = Instruction::new_with_bytes(env.torna, &d,
+            vec![AccountMeta::new(hdr2, false), AccountMeta::new_readonly(c2, true)]);
+        env.run(&k2, ta).expect("transfer to rust book PDA");
+        // proxy InsertFast via the Rust probe (torna-cpi insert_fast, signs as ["book"])
+        let key_n = 25u32;
+        let path = env.path(&c2, &k32(key_n));
+        let mut data = vec![rbump]; data.extend_from_slice(&k32(key_n)); data.extend_from_slice(&[0x7Eu8; VS]);
+        let mut metas = vec![
+            AccountMeta::new_readonly(env.torna, false),
+            AccountMeta::new_readonly(rbook, false),
+            AccountMeta::new_readonly(hdr2, false),
+        ];
+        for (i, &n) in path.iter().enumerate() {
+            let pk = env.pda_node(&c2, n).0;
+            metas.push(if i == path.len() - 1 { AccountMeta::new(pk, false) } else { AccountMeta::new_readonly(pk, false) });
+        }
+        check!(env.run(&k2, Instruction::new_with_bytes(env.rust_probe, &data, metas)).is_ok(),
+               "Rust torna-cpi crate: InsertFast via book-PDA authority succeeds");
+        check!(env.find(&k2, key_n), "Rust CPI: proxied key landed in the book");
     }
 
     println!("\ncpitest (composability de-risk): pass={pass} fail={fail} -> {}",

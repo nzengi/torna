@@ -17,9 +17,16 @@ use solana_sdk::{
 pub const IX_INIT_TREE: u8 = 0;
 pub const IX_INSERT: u8 = 2;
 pub const IX_FIND: u8 = 3;
+pub const IX_DELETE: u8 = 8;
 pub const IX_INSERT_FAST: u8 = 16;
 pub const IX_UPDATE_FAST: u8 = 17;
 pub const IX_DELETE_FAST: u8 = 18;
+
+// engine error codes a client classifies for retry/fallback (see torna.c)
+pub const ERR_NEED_SPLIT_SLOT: u32 = 102; // InsertFast hit a full leaf -> use insert (cold)
+pub const ERR_DUPLICATE_KEY: u32 = 103;
+pub const ERR_KEY_NOT_FOUND: u32 = 104;
+pub const ERR_BAD_PATH: u32 = 105; // a node_idx/tree_uid mismatch -> path went stale, re-resolve
 
 // ---- frozen layout (abi.md) ----
 pub const KEY_SIZE: usize = 32;
@@ -35,6 +42,7 @@ const H_ROOT: usize = 54;
 const H_HEIGHT: usize = 62;
 const H_LEFTMOST: usize = 66;
 const H_RIGHTMOST: usize = 74;
+const H_EPOCH: usize = 82;
 const H_AUTHORITY: usize = 90;
 // node field offsets
 const N_KEY_COUNT: usize = 2;
@@ -62,6 +70,9 @@ pub struct Header {
     pub height: u32,
     pub leftmost: u64,
     pub rightmost: u64,
+    /// bumped ONLY on a structural change (split/merge/root). A stable epoch between
+    /// resolve and submit means the cached path is still valid; a change means re-resolve.
+    pub structure_epoch: u64,
     pub authority: Pubkey,
 }
 
@@ -75,6 +86,7 @@ impl Header {
             height: rd_u32(d, H_HEIGHT),
             leftmost: rd_u64(d, H_LEFTMOST),
             rightmost: rd_u64(d, H_RIGHTMOST),
+            structure_epoch: rd_u64(d, H_EPOCH),
             authority: Pubkey::new_from_array(d[H_AUTHORITY..H_AUTHORITY + 32].try_into().unwrap()),
         }
     }
@@ -218,6 +230,41 @@ impl Tree {
         Some(Instruction::new_with_bytes(self.program, &data, metas))
     }
 
+    /// Delete (cold path): removes a key and rebalances (borrow/merge), reclaiming
+    /// rent to `payer`. Resolves, for each non-root level, which sibling the engine
+    /// needs (right if our child is not the last, else left) by reading each parent.
+    /// `payer` must be the tree authority (Delete is primary-only).
+    pub fn delete_ix(&self, r: &dyn AccountReader, payer: Pubkey, key: &[u8; 32]) -> Option<Instruction> {
+        let h = self.header(r)?;
+        if h.height == 0 { return None; }
+        let path = self.path(r, key)?;
+        let height = path.len();
+        let ko = NODE_HDR + (h.fanout as usize + 1) * KEY_SIZE;
+        let mut sides = vec![0u8; height];
+        let mut sib_idxs: Vec<u64> = Vec::new();
+        for level in 1..height {
+            let node_idx = path[level];
+            let pd = r.account_data(&self.node_pda(path[level - 1]).0)?;
+            let pcnt = rd_u16(&pd, N_KEY_COUNT) as usize;
+            let kid = |i: usize| rd_u64(&pd, ko + i * 8);
+            let mut our = 0usize;
+            for i in 0..=pcnt { if kid(i) == node_idx { our = i; break; } }
+            if our < pcnt { sides[level] = 1; sib_idxs.push(kid(our + 1)); } // right sibling
+            else { sides[level] = 2; sib_idxs.push(kid(our - 1)); }          // left sibling
+        }
+        let mut data = vec![IX_DELETE];
+        data.extend_from_slice(key);
+        data.push(height as u8);
+        data.extend_from_slice(&sides);
+        let mut metas = vec![
+            AccountMeta::new(self.header_pda().0, false),
+            AccountMeta::new(payer, true),
+        ];
+        for &n in &path { metas.push(AccountMeta::new(self.node_pda(n).0, false)); }
+        for &s in &sib_idxs { metas.push(AccountMeta::new(self.node_pda(s).0, false)); }
+        Some(Instruction::new_with_bytes(self.program, &data, metas))
+    }
+
     /// InitTree. `rent_hdr`/`rent_alloc` from the caller's client.
     pub fn init_tree_ix(&self, payer: Pubkey, value_size: u16, fanout: u16, rent_hdr: u64, rent_alloc: u64) -> Instruction {
         let (hdr, hb) = self.header_pda();
@@ -285,6 +332,48 @@ impl Tree {
             Some(d[voff + lo * vs..voff + lo * vs + vs].to_vec())
         } else { None }
     }
+
+    /// The header + the leaf account pubkeys a forward scan of up to `max_entries`
+    /// would traverse. A K-order match tx references these, so they go in an Address
+    /// Lookup Table (build the v0 message + ALT with solana-sdk's address_lookup_table;
+    /// the ALT program calls are standard Solana, not Torna-specific).
+    pub fn scan_accounts(&self, r: &dyn AccountReader, max_entries: usize) -> Vec<Pubkey> {
+        let h = match self.header(r) { Some(h) if h.height > 0 => h, _ => return vec![] };
+        let mut out = vec![self.header_pda().0];
+        let (mut idx, mut seen) = (h.leftmost, 0usize);
+        while idx != 0 && seen < max_entries {
+            let pk = self.node_pda(idx).0;
+            out.push(pk);
+            let d = match r.account_data(&pk) { Some(d) => d, None => break };
+            seen += rd_u16(&d, N_KEY_COUNT) as usize;
+            idx = rd_u64(&d, N_NEXT_LEAF);
+        }
+        out
+    }
+}
+
+/// One resolve+submit attempt for [`retry`].
+pub enum Attempt<T, E> {
+    Done(T),   // success
+    Stale,     // the cached path went stale (ERR_BAD_PATH after a concurrent split/merge)
+    Fatal(E),  // a real error -> stop retrying
+}
+
+/// Re-resolve + resubmit up to `attempts` times. `f` should resolve the instruction
+/// from FRESH state (the planner reads live accounts each call) and submit it,
+/// returning `Attempt::Stale` to retry. This is the SDK's staleness model: splits are
+/// rare (leaf-full), but between resolving a path and the tx landing a concurrent
+/// writer may have split/merged a node, invalidating node_idx -> ERR_BAD_PATH; the
+/// client just re-resolves. Compare Header::structure_epoch to detect it cheaply.
+pub fn retry<T, E>(attempts: u32, mut f: impl FnMut() -> Attempt<T, E>) -> Option<Result<T, E>> {
+    for _ in 0..attempts {
+        match f() {
+            Attempt::Done(t) => return Some(Ok(t)),
+            Attempt::Fatal(e) => return Some(Err(e)),
+            Attempt::Stale => continue,
+        }
+    }
+    None
 }
 
 /// Orderbook key convention (CLOB-specific; the core Tree is key-agnostic).
@@ -335,6 +424,21 @@ mod tests {
         assert_eq!(price_of(Side::Ask, &a), 12345);
         assert_eq!(slot_of(&a), 7);
         assert_eq!(price_of(Side::Bid, &order_key(Side::Bid, 999, 0, &m, 0)), 999);
+    }
+
+    #[test]
+    fn retry_resolves_after_stale() {
+        use super::{retry, Attempt};
+        // succeeds on the 3rd attempt after two stale re-resolves
+        let mut n = 0;
+        let r: Option<Result<i32, ()>> = retry(5, || { n += 1; if n < 3 { Attempt::Stale } else { Attempt::Done(n) } });
+        assert_eq!(r, Some(Ok(3)));
+        // a fatal error stops immediately
+        let r: Option<Result<(), &str>> = retry(5, || Attempt::Fatal("boom"));
+        assert_eq!(r, Some(Err("boom")));
+        // exhausting attempts returns None
+        let r: Option<Result<(), ()>> = retry(2, || Attempt::Stale);
+        assert!(r.is_none());
     }
 }
 

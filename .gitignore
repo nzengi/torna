@@ -5,4 +5,6 @@ integration/target/
 integration/Cargo.lock
 bench/target/
 bench/PROGRAM_ID.txt
-target/
+sdk/target/
+cpi/target/
+cpi-probe/target/
