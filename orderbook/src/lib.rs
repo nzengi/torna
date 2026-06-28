@@ -105,8 +105,11 @@ fn place(accounts: &[AccountInfo], data: &[u8]) -> ProgramResult {
     let maker = &accounts[0];
     if !maker.is_signer { return Err(ProgramError::MissingRequiredSignature); }
 
-    // escrow base into the vault (maker authorizes; they are the tx signer)
-    token_transfer(&accounts[6], &accounts[4], &accounts[5], maker, size, None)?;
+    // escrow into the vault (maker authorizes; they are the tx signer). ASK makers lock
+    // `size` base; BID makers lock `price*size` quote. The client passes the matching
+    // source account (maker_base/maker_quote) and vault (base/quote).
+    let escrow = if side == ASK { size } else { price.checked_mul(size).ok_or(ProgramError::ArithmeticOverflow)? };
+    token_transfer(&accounts[6], &accounts[4], &accounts[5], maker, escrow, None)?;
 
     let key = order_key(side, price, slot_est, maker.key, nonce);
     let value = order_value(maker.key, size);
@@ -114,27 +117,29 @@ fn place(accounts: &[AccountInfo], data: &[u8]) -> ProgramResult {
     torna_cpi::insert_fast(&accounts[2], &accounts[1], &accounts[3], &accounts[7..], &key, &value, &[seeds])
 }
 
-/// CancelOrder: refund the escrowed base, then remove the order.
-/// data: [1][key 32][market_id u64][bump u8]
-/// accounts: [maker(s), market_pda, torna, header, base_vault(w), maker_base(w),
-///            token_program, path(leaf w)]
+/// CancelOrder: refund the escrow, then remove the order.
+/// data: [1][key 32][side u8][market_id u64][bump u8]
+/// accounts: [maker(s), market_pda, torna, header, vault(w), maker_dst(w),
+///            token_program, path(leaf w)]  (vault/dst = base for ASK, quote for BID)
 fn cancel(accounts: &[AccountInfo], data: &[u8]) -> ProgramResult {
-    if data.len() < 42 { return Err(ProgramError::InvalidInstructionData); }
+    if data.len() < 43 { return Err(ProgramError::InvalidInstructionData); }
     if accounts.len() < 8 { return Err(ProgramError::NotEnoughAccountKeys); }
     let key: [u8; 32] = data[1..33].try_into().unwrap();
-    let market_id = rd_u64(data, 33);
-    let bump = data[41];
+    let side = data[33];
+    let market_id = rd_u64(data, 34);
+    let bump = data[42];
     let maker = &accounts[0];
     if !maker.is_signer { return Err(ProgramError::MissingRequiredSignature); }
     if key[16..24] != maker.key.to_bytes()[0..8] { return Err(ProgramError::IllegalOwner); }
 
-    // read the order's escrowed size from the leaf (last path account)
+    // refund = what was escrowed: ASK -> size base; BID -> price*size quote
     let size = order_size_in_leaf(&accounts[3], accounts.last().unwrap(), &key)?;
+    let refund = if side == ASK { size }
+        else { price_of(side, &key).checked_mul(size).ok_or(ProgramError::ArithmeticOverflow)? };
 
     let mid = market_id.to_le_bytes();
     let seeds: &[&[u8]] = &[b"book", &mid, &[bump]];
-    // refund base (vault -> maker; the market PDA owns the vault)
-    token_transfer(&accounts[6], &accounts[4], &accounts[5], &accounts[1], size, Some(&[seeds]))?;
+    token_transfer(&accounts[6], &accounts[4], &accounts[5], &accounts[1], refund, Some(&[seeds]))?;
     torna_cpi::delete_fast(&accounts[2], &accounts[1], &accounts[3], &accounts[7..], &key, &[seeds])
 }
 
@@ -214,14 +219,18 @@ fn matcher(accounts: &[AccountInfo], data: &[u8]) -> ProgramResult {
     let seeds: &[&[u8]] = &[b"book", &mid, &[bump]];
     let path = &accounts[8 + max_fills..];
     for j in 0..nf {
-        // settle: release base (vault -> taker) and collect quote (taker -> maker)
-        let maker_quote = &accounts[8 + j];
-        if maker_quote.try_borrow_data()?[TA_OWNER..TA_OWNER + 32] != makers[j] {
-            return Err(ProgramError::IllegalOwner); // wrong maker quote account passed
+        // settle. ASK book (taker buy): release `fill` base from vault -> taker, collect
+        // `price*fill` quote taker -> maker. BID book (taker sell): release `price*fill`
+        // quote from vault -> taker, collect `fill` base taker -> maker. The client passes
+        // the matching vault/taker_recv/taker_pay/maker_recv accounts per side.
+        let maker_recv = &accounts[8 + j];
+        if maker_recv.try_borrow_data()?[TA_OWNER..TA_OWNER + 32] != makers[j] {
+            return Err(ProgramError::IllegalOwner); // wrong maker account passed
         }
         let quote_amt = prices[j].checked_mul(fills[j]).ok_or(ProgramError::ArithmeticOverflow)?;
-        token_transfer(&accounts[7], &accounts[4], &accounts[5], &accounts[1], fills[j], Some(&[seeds]))?;
-        token_transfer(&accounts[7], &accounts[6], maker_quote, &accounts[0], quote_amt, None)?;
+        let (release, collect) = if book_side == ASK { (fills[j], quote_amt) } else { (quote_amt, fills[j]) };
+        token_transfer(&accounts[7], &accounts[4], &accounts[5], &accounts[1], release, Some(&[seeds]))?;
+        token_transfer(&accounts[7], &accounts[6], maker_recv, &accounts[0], collect, None)?;
         // update the book
         if new_sizes[j] == 0 {
             torna_cpi::delete_fast(&accounts[2], &accounts[1], header, path, &keys[j], &[seeds])?;

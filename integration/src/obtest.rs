@@ -187,7 +187,7 @@ fn main() {
 
     // ---- Cancel: B cancels its remaining size 4 -> refund 4 base ----
     let path = { let r = R(&svm); ask.path(&r, &kb).unwrap() };
-    let mut data = vec![1u8]; data.extend_from_slice(&kb);
+    let mut data = vec![1u8]; data.extend_from_slice(&kb); data.push(ASK);
     data.extend_from_slice(&MARKET_ID.to_le_bytes()); data.push(bump);
     let mut metas = vec![
         AccountMeta::new(b.pubkey(), true), AccountMeta::new_readonly(market_pda, false),
@@ -202,6 +202,87 @@ fn main() {
     send!([&b], Instruction::new_with_bytes(orderbook, &data, metas)).expect("cancel");
     check!({ let r = R(&svm); ask.get(&r, &kb).is_none() }, "Cancel: B's order removed");
     check!(bal(&svm, &b_base.pubkey()) == 4 && bal(&svm, &base_vault.pubkey()) == 0, "refund: 4 base returned to B");
+
+    // ================= BID side: a taker SELL matches the bid book =================
+    const BID: u8 = 1;
+    let bid = Tree::new(torna, u.pubkey(), 2); // the bid book (tree_id 2, same market PDA)
+    let quote_vault = mk_acct(&mut svm, &quote_mint.pubkey(), &market_pda);
+    // bid book setup: init, seed a low (worst) bid so it sorts last, authority -> PDA
+    send!([&u], bid.init_tree_ix(u.pubkey(), VS, F, rent(&svm, 146), rent(&svm, 32))).unwrap();
+    let bseed = keys::order_key(keys::Side::Bid, 1, 0, &u.pubkey(), 0);
+    let bseedv = { let mut v = vec![0u8; VS as usize]; v[0..32].copy_from_slice(u.pubkey().as_ref()); v };
+    let ix = { let r = R(&svm); bid.insert_ix(&r, u.pubkey(), &bseed, &bseedv, rent(&svm, node_size(F as usize, VS as usize))).unwrap() };
+    send!([&u], ix).unwrap();
+    let mut d = vec![11u8]; d.extend_from_slice(market_pda.as_ref());
+    send!([&u], Instruction::new_with_bytes(torna, &d,
+        vec![AccountMeta::new(bid.header_pda().0, false), AccountMeta::new_readonly(u.pubkey(), true)])).unwrap();
+
+    // bid makers C, D + taker2; fund: C 500 quote, D 720 quote, taker2 9 base
+    let (c, dd, t2) = (Keypair::new(), Keypair::new(), Keypair::new());
+    for kp in [&c, &dd, &t2] { svm.airdrop(&kp.pubkey(), 1_000_000_000).unwrap(); }
+    let c_quote = mk_acct(&mut svm, &quote_mint.pubkey(), &c.pubkey());
+    let c_base = mk_acct(&mut svm, &base_mint.pubkey(), &c.pubkey());
+    let d_quote = mk_acct(&mut svm, &quote_mint.pubkey(), &dd.pubkey());
+    let d_base = mk_acct(&mut svm, &base_mint.pubkey(), &dd.pubkey());
+    let t2_base = mk_acct(&mut svm, &base_mint.pubkey(), &t2.pubkey());
+    let t2_quote = mk_acct(&mut svm, &quote_mint.pubkey(), &t2.pubkey());
+    send!([&u], mint_to(&quote_mint.pubkey(), &c_quote.pubkey(), 500)).unwrap();
+    send!([&u], mint_to(&quote_mint.pubkey(), &d_quote.pubkey(), 720)).unwrap();
+    send!([&u], mint_to(&base_mint.pubkey(), &t2_base.pubkey(), 9)).unwrap();
+
+    // place bids (escrow quote = price*size into the quote vault)
+    let place_bid = |svm: &mut LiteSVM, maker: &Keypair, src: &Pubkey, price: u64, size: u64, nonce: u64| -> [u8; 32] {
+        let key = keys::order_key(keys::Side::Bid, price, 0, &maker.pubkey(), nonce);
+        let path = { let r = R(svm); bid.path(&r, &key).unwrap() };
+        let mut data = vec![0u8, BID];
+        data.extend_from_slice(&price.to_le_bytes()); data.extend_from_slice(&size.to_le_bytes());
+        data.extend_from_slice(&0u64.to_le_bytes()); data.extend_from_slice(&nonce.to_le_bytes());
+        data.extend_from_slice(&MARKET_ID.to_le_bytes()); data.push(bump);
+        let mut metas = vec![
+            AccountMeta::new(maker.pubkey(), true), AccountMeta::new_readonly(market_pda, false),
+            AccountMeta::new_readonly(torna, false), AccountMeta::new_readonly(bid.header_pda().0, false),
+            AccountMeta::new(*src, false), AccountMeta::new(quote_vault.pubkey(), false),
+            AccountMeta::new_readonly(token, false),
+        ];
+        for (i, &n) in path.iter().enumerate() {
+            let pk = bid.node_pda(n).0;
+            metas.push(if i == path.len() - 1 { AccountMeta::new(pk, false) } else { AccountMeta::new_readonly(pk, false) });
+        }
+        let bh = svm.latest_blockhash();
+        let tx = Transaction::new(&[maker], Message::new(&[Instruction::new_with_bytes(orderbook, &data, metas)], Some(&maker.pubkey())), bh);
+        svm.send_transaction(tx).expect("place_bid");
+        key
+    };
+    let kc = place_bid(&mut svm, &c, &c_quote.pubkey(), 100, 5, 1);
+    let kd = place_bid(&mut svm, &dd, &d_quote.pubkey(), 90, 8, 1);
+    check!(bal(&svm, &quote_vault.pubkey()) == 1220, "bid escrow: vault holds 500+720 quote");
+
+    // taker SELL: limit 85, size 9 -> C@100 full (5) + D@90 partial (4); best bid first
+    let path = { let r = R(&svm); bid.path(&r, &kc).unwrap() };
+    let mut md = vec![2u8, BID];
+    md.extend_from_slice(&85u64.to_le_bytes()); md.extend_from_slice(&9u64.to_le_bytes());
+    md.push(2); md.extend_from_slice(&MARKET_ID.to_le_bytes()); md.push(bump);
+    let mut metas = vec![
+        AccountMeta::new(t2.pubkey(), true), AccountMeta::new_readonly(market_pda, false),
+        AccountMeta::new_readonly(torna, false), AccountMeta::new_readonly(bid.header_pda().0, false),
+        AccountMeta::new(quote_vault.pubkey(), false), AccountMeta::new(t2_quote.pubkey(), false),
+        AccountMeta::new(t2_base.pubkey(), false), AccountMeta::new_readonly(token, false),
+        AccountMeta::new(c_base.pubkey(), false), AccountMeta::new(d_base.pubkey(), false),
+    ];
+    for (i, &n) in path.iter().enumerate() {
+        let pk = bid.node_pda(n).0;
+        metas.push(if i == path.len() - 1 { AccountMeta::new(pk, false) } else { AccountMeta::new_readonly(pk, false) });
+    }
+    let ret = send!([&t2], Instruction::new_with_bytes(orderbook, &md, metas)).expect("match sell");
+    check!(ret[0] == 2, "BID Match: 2 fills (C full, D partial)");
+    check!({ let r = R(&svm); bid.get(&r, &kc).is_none() }, "BID Match: C removed (full)");
+    check!({ let r = R(&svm); bid.get(&r, &kd).map(|v| u64::from_be_bytes(v[32..40].try_into().unwrap())) } == Some(4), "BID Match: D reduced 8->4");
+    // settlement (taker sell): taker gave 9 base, received 100*5+90*4=860 quote
+    check!(bal(&svm, &t2_base.pubkey()) == 0, "BID settle: taker gave 9 base");
+    check!(bal(&svm, &t2_quote.pubkey()) == 860, "BID settle: taker received 860 quote");
+    check!(bal(&svm, &c_base.pubkey()) == 5, "BID settle: C received 5 base");
+    check!(bal(&svm, &d_base.pubkey()) == 4, "BID settle: D received 4 base");
+    check!(bal(&svm, &quote_vault.pubkey()) == 1220 - 860, "BID settle: quote vault 1220->360");
 
     println!("\nobtest (orderbook + token settlement): pass={pass} fail={fail} -> {}",
              if fail == 0 { "ALL PASS" } else { "FAILURES" });
