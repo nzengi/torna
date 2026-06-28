@@ -161,7 +161,7 @@ fn main() {
     let path = { let r = R(&svm); ask.path(&r, &ka).unwrap() };
     let mut md = vec![2u8, ASK];
     md.extend_from_slice(&115u64.to_le_bytes()); md.extend_from_slice(&9u64.to_le_bytes());
-    md.push(2); md.extend_from_slice(&MARKET_ID.to_le_bytes()); md.push(bump);
+    md.push(2); md.extend_from_slice(&MARKET_ID.to_le_bytes()); md.push(bump); md.push(1); md.push(path.len() as u8);
     let mut metas = vec![
         AccountMeta::new(taker.pubkey(), true), AccountMeta::new_readonly(market_pda, false),
         AccountMeta::new_readonly(torna, false), AccountMeta::new_readonly(ask.header_pda().0, false),
@@ -261,7 +261,7 @@ fn main() {
     let path = { let r = R(&svm); bid.path(&r, &kc).unwrap() };
     let mut md = vec![2u8, BID];
     md.extend_from_slice(&85u64.to_le_bytes()); md.extend_from_slice(&9u64.to_le_bytes());
-    md.push(2); md.extend_from_slice(&MARKET_ID.to_le_bytes()); md.push(bump);
+    md.push(2); md.extend_from_slice(&MARKET_ID.to_le_bytes()); md.push(bump); md.push(1); md.push(path.len() as u8);
     let mut metas = vec![
         AccountMeta::new(t2.pubkey(), true), AccountMeta::new_readonly(market_pda, false),
         AccountMeta::new_readonly(torna, false), AccountMeta::new_readonly(bid.header_pda().0, false),
@@ -363,6 +363,46 @@ fn main() {
             if { let r = R(&svm); ask4.get(&r, &k).is_none() } { all = false; }
         }
         check!(all, "ColdPlace: all orders survive the split");
+
+        // ---- MULTI-LEAF match: a taker buy sweeps across BOTH leaves of ask4 ----
+        // ask4 now has 2 leaves: {200,201} then {202,203,1M sentinel}. A buy @250 x4
+        // fills 200,201 (leaf 0) + 202,203 (leaf 1) -- a cross-leaf sweep.
+        let e_quote = mk_acct(&mut svm, &quote_mint.pubkey(), &e.pubkey());
+        let taker3 = Keypair::new(); svm.airdrop(&taker3.pubkey(), 1_000_000_000).unwrap();
+        let t3_base = mk_acct(&mut svm, &base_mint.pubkey(), &taker3.pubkey());
+        let t3_quote = mk_acct(&mut svm, &quote_mint.pubkey(), &taker3.pubkey());
+        send!([&u], mint_to(&quote_mint.pubkey(), &t3_quote.pubkey(), 2000)).unwrap();
+        let k200 = keys::order_key(keys::Side::Ask, 200, 0, &e.pubkey(), 1);
+        let k202 = keys::order_key(keys::Side::Ask, 202, 0, &e.pubkey(), 3);
+        let p0 = { let r = R(&svm); ask4.path(&r, &k200).unwrap() }; // [root, leaf0]
+        let p1 = { let r = R(&svm); ask4.path(&r, &k202).unwrap() }; // [root, leaf1]
+        let v_b4 = bal(&svm, &base_vault.pubkey());
+        let mut md = vec![2u8, ASK];
+        md.extend_from_slice(&250u64.to_le_bytes()); md.extend_from_slice(&4u64.to_le_bytes());
+        md.push(4); md.extend_from_slice(&MARKET_ID.to_le_bytes()); md.push(bump);
+        md.push(2); md.push(2); // num_leaves=2, height=2
+        let mut metas = vec![
+            AccountMeta::new(taker3.pubkey(), true), AccountMeta::new_readonly(market_pda, false),
+            AccountMeta::new_readonly(torna, false), AccountMeta::new_readonly(ask4.header_pda().0, false),
+            AccountMeta::new(base_vault.pubkey(), false), AccountMeta::new(t3_base.pubkey(), false),
+            AccountMeta::new(t3_quote.pubkey(), false), AccountMeta::new_readonly(token, false),
+        ];
+        for _ in 0..4 { metas.push(AccountMeta::new(e_quote.pubkey(), false)); } // maker_recv[4] (all E)
+        for grp in [&p0, &p1] {
+            for (i, &n) in grp.iter().enumerate() {
+                let pk = ask4.node_pda(n).0;
+                metas.push(if i == grp.len() - 1 { AccountMeta::new(pk, false) } else { AccountMeta::new_readonly(pk, false) });
+            }
+        }
+        let ret = send!([&taker3], Instruction::new_with_bytes(orderbook, &md, metas)).expect("multi-leaf match");
+        check!(ret[0] == 4, "Multi-leaf: 4 fills across 2 leaves");
+        let gone = [(200u64,1u64),(201,2),(202,3),(203,4)].iter()
+            .all(|&(p,n)| { let r = R(&svm); ask4.get(&r, &keys::order_key(keys::Side::Ask,p,0,&e.pubkey(),n)).is_none() });
+        check!(gone, "Multi-leaf: all 4 swept orders removed");
+        check!(bal(&svm, &t3_base.pubkey()) == 4, "Multi-leaf: taker received 4 base");
+        check!(bal(&svm, &t3_quote.pubkey()) == 2000 - (200+201+202+203), "Multi-leaf: taker paid 806 quote");
+        check!(bal(&svm, &e_quote.pubkey()) == 200+201+202+203, "Multi-leaf: maker E received 806 quote");
+        check!(bal(&svm, &base_vault.pubkey()) == v_b4 - 4, "Multi-leaf: vault released 4 base");
     }
 
     println!("\nobtest (orderbook + token settlement): pass={pass} fail={fail} -> {}",

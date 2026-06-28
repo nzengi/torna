@@ -19,6 +19,7 @@ path = "src/inttest.rs"
 litesvm = "0.10"
 solana-sdk = "3.0"
 torna-sdk = { path = "../sdk" }
+solana-address-lookup-table-interface = "3.1"
 
 [[bin]]
 name = "difftest"
@@ -43,3 +44,7 @@ path = "src/sdktest.rs"
 [[bin]]
 name = "obtest"
 path = "src/obtest.rs"
+
+[[bin]]
+name = "alttest"
+path = "src/alttest.rs"

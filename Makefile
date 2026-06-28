@@ -50,6 +50,7 @@ integration: sbf probe cpi-probe orderbook
 	cd integration && ./target/debug/cpitest
 	cd integration && ./target/debug/sdktest
 	cd integration && ./target/debug/obtest
+	cd integration && ./target/debug/alttest
 
 # exhaustive on-chain differential vs an oracle (validates the SBF wrapper; ~70s)
 diff: sbf

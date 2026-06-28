@@ -35,6 +35,7 @@ const H_FANOUT: usize = 48;
 const H_LEFTMOST: usize = 66;
 const N_KEY_COUNT: usize = 2;
 const N_NODE_IDX: usize = 12;
+const N_NEXT_LEAF: usize = 20;
 
 entrypoint!(process);
 
@@ -205,73 +206,78 @@ fn order_size_in_leaf(header: &AccountInfo, leaf: &AccountInfo, key: &[u8; 32]) 
 ///            taker_quote(w), token_program, maker_quote[0..K](w), path(leaf w)]
 /// return_data: [n][(maker 32, price_be u64, fill_be u64)*n].
 fn matcher(accounts: &[AccountInfo], data: &[u8]) -> ProgramResult {
-    if data.len() < 28 { return Err(ProgramError::InvalidInstructionData); }
+    if data.len() < 30 { return Err(ProgramError::InvalidInstructionData); }
     let book_side = data[1];
     let limit = rd_u64(data, 2);
     let mut remaining = rd_u64(data, 10);
     let max_fills = (data[18] as usize).min(MAXK);
     let market_id = rd_u64(data, 19);
     let bump = data[27];
-    // fixed accounts (8) + K maker_quote + path(>=1)
-    if accounts.len() < 8 + max_fills + 1 { return Err(ProgramError::NotEnoughAccountKeys); }
+    let num_leaves = data[28] as usize;
+    let height = data[29] as usize;
+    if num_leaves == 0 || height == 0 { return Err(ProgramError::InvalidInstructionData); }
     if !accounts[0].is_signer { return Err(ProgramError::MissingRequiredSignature); }
+    let base = 8 + max_fills; // leaf groups (num_leaves x height) start here
+    if accounts.len() < base + num_leaves * height { return Err(ProgramError::NotEnoughAccountKeys); }
     let header = &accounts[3];
-    let leaf = accounts.last().unwrap();
+    let leaf_of = |g: usize| &accounts[base + g * height + (height - 1)]; // the leaf in group g
 
     let mut keys = [[0u8; 32]; MAXK];
     let mut makers = [[0u8; 32]; MAXK];
     let mut prices = [0u64; MAXK];
     let mut fills = [0u64; MAXK];
     let mut new_sizes = [0u64; MAXK];
+    let mut grp = [0u8; MAXK]; // which leaf group each fill is in (its path for phase 2)
     let mut nf = 0usize;
     {
         let hd = header.try_borrow_data()?;
         let fanout = u16::from_le_bytes(hd[H_FANOUT..H_FANOUT + 2].try_into().unwrap()) as usize;
         let vs = u16::from_le_bytes(hd[H_VALUE_SIZE..H_VALUE_SIZE + 2].try_into().unwrap()) as usize;
-        let leftmost = u64::from_le_bytes(hd[H_LEFTMOST..H_LEFTMOST + 8].try_into().unwrap());
         if vs < 40 { return Err(ProgramError::InvalidAccountData); }
-        let ld = leaf.try_borrow_data()?;
-        if u64::from_le_bytes(ld[N_NODE_IDX..N_NODE_IDX + 8].try_into().unwrap()) != leftmost {
-            return Err(ProgramError::InvalidArgument);
-        }
-        let cnt = u16::from_le_bytes(ld[N_KEY_COUNT..N_KEY_COUNT + 2].try_into().unwrap()) as usize;
         let voff = NODE_HDR + (fanout + 1) * 32;
-        for i in 0..cnt {
+        // leaf 0 must be the book's best (leftmost); each next must chain from the prev
+        let mut expected = u64::from_le_bytes(hd[H_LEFTMOST..H_LEFTMOST + 8].try_into().unwrap());
+        'sweep: for g in 0..num_leaves {
             if remaining == 0 || nf >= max_fills { break; }
-            let key: [u8; 32] = ld[NODE_HDR + i * 32..NODE_HDR + i * 32 + 32].try_into().unwrap();
-            let price = price_of(book_side, &key);
-            let cross = if book_side == ASK { price <= limit } else { price >= limit };
-            if !cross { break; }
-            let vo = voff + i * vs;
-            let resting = u64::from_be_bytes(ld[vo + 32..vo + 40].try_into().unwrap());
-            let fill = remaining.min(resting);
-            keys[nf] = key;
-            makers[nf].copy_from_slice(&ld[vo..vo + 32]);
-            prices[nf] = price;
-            fills[nf] = fill;
-            new_sizes[nf] = resting - fill;
-            remaining -= fill;
-            nf += 1;
+            let ld = leaf_of(g).try_borrow_data()?;
+            if u64::from_le_bytes(ld[N_NODE_IDX..N_NODE_IDX + 8].try_into().unwrap()) != expected {
+                return Err(ProgramError::InvalidArgument); // wrong/out-of-order leaf
+            }
+            let cnt = u16::from_le_bytes(ld[N_KEY_COUNT..N_KEY_COUNT + 2].try_into().unwrap()) as usize;
+            for i in 0..cnt {
+                if remaining == 0 || nf >= max_fills { break; }
+                let key: [u8; 32] = ld[NODE_HDR + i * 32..NODE_HDR + i * 32 + 32].try_into().unwrap();
+                let price = price_of(book_side, &key);
+                let cross = if book_side == ASK { price <= limit } else { price >= limit };
+                if !cross { break 'sweep; } // globally sorted -> first non-crosser ends it
+                let vo = voff + i * vs;
+                let resting = u64::from_be_bytes(ld[vo + 32..vo + 40].try_into().unwrap());
+                let fill = remaining.min(resting);
+                keys[nf] = key;
+                makers[nf].copy_from_slice(&ld[vo..vo + 32]);
+                prices[nf] = price; fills[nf] = fill; new_sizes[nf] = resting - fill; grp[nf] = g as u8;
+                remaining -= fill; nf += 1;
+            }
+            expected = u64::from_le_bytes(ld[N_NEXT_LEAF..N_NEXT_LEAF + 8].try_into().unwrap());
         }
     }
 
     let mid = market_id.to_le_bytes();
     let seeds: &[&[u8]] = &[b"book", &mid, &[bump]];
-    let path = &accounts[8 + max_fills..];
     for j in 0..nf {
         // settle. ASK book (taker buy): release `fill` base from vault -> taker, collect
-        // `price*fill` quote taker -> maker. BID book (taker sell): release `price*fill`
-        // quote from vault -> taker, collect `fill` base taker -> maker. The client passes
-        // the matching vault/taker_recv/taker_pay/maker_recv accounts per side.
+        // `price*fill` quote taker -> maker. BID book (taker sell): mirror. The order is
+        // mutated through its OWN leaf-group path (the sweep may span leaves).
         let maker_recv = &accounts[8 + j];
         if maker_recv.try_borrow_data()?[TA_OWNER..TA_OWNER + 32] != makers[j] {
-            return Err(ProgramError::IllegalOwner); // wrong maker account passed
+            return Err(ProgramError::IllegalOwner);
         }
         let quote_amt = prices[j].checked_mul(fills[j]).ok_or(ProgramError::ArithmeticOverflow)?;
         let (release, collect) = if book_side == ASK { (fills[j], quote_amt) } else { (quote_amt, fills[j]) };
         token_transfer(&accounts[7], &accounts[4], &accounts[5], &accounts[1], release, Some(&[seeds]))?;
         token_transfer(&accounts[7], &accounts[6], maker_recv, &accounts[0], collect, None)?;
-        // update the book
+        let g = grp[j] as usize;
+        let path = &accounts[base + g * height..base + (g + 1) * height];
         if new_sizes[j] == 0 {
             torna_cpi::delete_fast(&accounts[2], &accounts[1], header, path, &keys[j], &[seeds])?;
         } else {
