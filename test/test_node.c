@@ -205,6 +205,24 @@ static void test_internal(int F) {
     free(d); free(nd);
 }
 
+/* internal_remove_first: drop kids[0] + keys[0] (CompactLeaf's leftmost removal) */
+static void test_internal_remove_first(int F) {
+    uint8_t *d = calloc(1, internal_node_size(F));
+    node_hdr(d)->is_leaf = 0; node_hdr(d)->initialized = 1;
+    uint64_t *kids = node_kids(d, F);
+    uint8_t k[KEY_SIZE];
+    uint32_t seed[3] = {10, 20, 30};
+    for (int i = 0; i < 3; i++) { mk_key(k, seed[i]); memcpy(key_ptr(d, i), k, KEY_SIZE); }
+    node_hdr(d)->key_count = 3;
+    for (int i = 0; i < 4; i++) kids[i] = 100 + i; /* kids [100,101,102,103] */
+
+    internal_remove_first(d, F); /* drop kids[0]=100, keys[0]=10 */
+    CHECK(node_hdr(d)->key_count == 2, "remove_first: count 3->2");
+    CHECK(key_num(key_ptr(d, 0)) == 20 && key_num(key_ptr(d, 1)) == 30, "remove_first: keys shifted [20,30]");
+    CHECK(kids[0] == 101 && kids[1] == 102 && kids[2] == 103, "remove_first: kids shifted [101,102,103]");
+    free(d);
+}
+
 int main(void) {
     int Fs[] = {32, 64, 128};
     int vss[] = {1, 8, 64, 128};
@@ -216,6 +234,7 @@ int main(void) {
             test_leaf_update(Fs[fi], vss[vi]);
         }
         test_internal(Fs[fi]);
+        test_internal_remove_first(Fs[fi]);
     }
     printf("checks=%d  failures=%d  -> %s\n", g_checks, g_fail,
            g_fail == 0 ? "ALL PASS" : "FAILURES");

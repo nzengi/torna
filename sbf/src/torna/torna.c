@@ -30,6 +30,7 @@
 #define ERR_NODE_TOO_SMALL   110
 #define ERR_BAD_IX_DATA      111
 #define ERR_TREE_UNINIT      112
+#define ERR_NOT_EMPTY        116
 #define ERR_NODE_UNINIT      113
 #define ERR_NOT_AUTHORIZED   115
 #define ERR_BAD_PARAM        116
@@ -58,6 +59,7 @@
 #define IX_ADD_DELEGATE     12
 #define IX_REMOVE_DELEGATE  13
 #define IX_MULTI_LEAF_INSERT_FAST 14
+#define IX_COMPACT     6
 #define IX_INSERT_FAST 16
 #define IX_UPDATE_FAST 17
 #define IX_DELETE_FAST 18
@@ -627,6 +629,55 @@ static uint64_t do_delete(SolParameters *p) {
         close_account(leaf, payer);
     }
     th->structure_epoch++;
+    return SUCCESS;
+}
+
+/* ======================= CompactLeaf (keeper, primary only) ===================
+ * Reclaim an EMPTY leftmost leaf left behind by DeleteFast sweeps: drop it from its
+ * parent, advance leftmost, and close it (rent -> payer). v1 requires the parent to
+ * have slack (key_count > MIN) so there is no merge cascade; a keeper calls it
+ * repeatedly to walk leftmost forward. Matching already SKIPS empty leaves, so this
+ * is rent/space reclaim, not a correctness requirement.
+ * ix: [6][path_len u8]   (path = root..leaf, the all-kids[0] leftmost chain)
+ * accounts: [0]header(w) [1]payer(s,w) [2..2+path_len) path(w) */
+static uint64_t do_compact_leaf(SolParameters *p) {
+    if (p->ka_num < 3) return ERROR_NOT_ENOUGH_ACCOUNT_KEYS;
+    uint64_t e = check_header(&p->ka[0], p->program_id, true);
+    if (e) return e;
+    TreeHeader *th = (TreeHeader *)p->ka[0].data;
+    int F = th->fanout, MINK = F / 2;
+    uint32_t ns = th->node_size;
+    if (p->data_len < 2) return ERR_BAD_IX_DATA;
+    uint8_t path_len = p->data[1];
+    if (!p->ka[1].is_signer) return ERROR_MISSING_REQUIRED_SIGNATURES;
+    if (!tx_has_authority(p, th->authority)) return ERR_NOT_AUTHORIZED; /* primary only (drains rent) */
+    if (th->height < 2) return ERR_BAD_PATH;        /* need a parent: a leaf-root can't compact */
+    if (path_len != th->height) return ERR_BAD_PATH;
+    if (p->ka_num < (uint64_t)2 + path_len) return ERROR_NOT_ENOUGH_ACCOUNT_KEYS;
+
+    /* validate the leftmost descent: each internal step takes kids[0] */
+    e = check_node(&p->ka[2], p->program_id, ns, th->root_node_idx, th->tree_uid, true);
+    if (e) return e;
+    for (int lvl = 0; lvl < path_len - 1; lvl++) {
+        SolAccountInfo *cur = &p->ka[2 + lvl];
+        if (node_hdr(cur->data)->is_leaf) return ERR_BAD_PATH;
+        uint64_t desc = node_kids(cur->data, F)[0]; /* leftmost child */
+        e = check_node(&p->ka[2 + lvl + 1], p->program_id, ns, desc, th->tree_uid, true);
+        if (e) return e;
+    }
+    SolAccountInfo *leaf = &p->ka[2 + path_len - 1];
+    SolAccountInfo *parent = &p->ka[2 + path_len - 2];
+    NodeHeader *lh = node_hdr(leaf->data);
+    if (!lh->is_leaf) return ERR_BAD_PATH;
+    if (lh->node_idx != th->leftmost_leaf_idx) return ERR_BAD_PATH; /* must be the leftmost */
+    if (lh->key_count != 0) return ERR_NOT_EMPTY;                   /* only empty leaves */
+    if (node_hdr(parent->data)->key_count <= MINK) return ERR_NEED_SPLIT_SLOT; /* no cascade in v1 */
+
+    uint64_t new_leftmost = lh->next_leaf_idx;     /* read before close */
+    internal_remove_first(parent->data, F);        /* drop kids[0]=leaf + keys[0] */
+    th->leftmost_leaf_idx = new_leftmost;
+    th->structure_epoch++;
+    close_account(leaf, &p->ka[1]);                /* rent -> payer */
     return SUCCESS;
 }
 
@@ -1219,6 +1270,7 @@ extern uint64_t entrypoint(const uint8_t *input) {
         case IX_ADD_DELEGATE:     return do_add_delegate(&params);
         case IX_REMOVE_DELEGATE:  return do_remove_delegate(&params);
         case IX_MULTI_LEAF_INSERT_FAST: return do_multi_leaf_insert_fast(&params);
+        case IX_COMPACT:     return do_compact_leaf(&params);
         case IX_INSERT_FAST: return do_insert_fast(&params);
         case IX_UPDATE_FAST: return do_update_fast(&params);
         case IX_DELETE_FAST: return do_delete_fast(&params);

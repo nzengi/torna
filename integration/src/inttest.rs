@@ -701,6 +701,42 @@ fn main() {
         check!(v2 == 0xAB, "UpdateFast: rejected update left the value unchanged");
     }
 
+    // ---- CompactLeaf: reclaim an emptied leftmost leaf (keeper) ----
+    {
+        let tcp = 40u32;
+        env.init(&p, tcp);
+        for n in 1u32..=12 { env.insert(&p, tcp, n).unwrap(); }
+        let c = p.pubkey();
+        let hd = env.acc(&env.pda_hdr(&c, tcp).0).unwrap();
+        let leftmost = u64::from_le_bytes(hd[66..74].try_into().unwrap());
+        let ld = env.acc(&env.pda_node(&c, tcp, leftmost).0).unwrap();
+        let kc = u16::from_le_bytes(ld[2..4].try_into().unwrap()) as usize;
+        let leaf_keys: Vec<u32> = (0..kc).map(|i| u32::from_be_bytes(ld[HDR + i * KEY + 28..HDR + i * KEY + 32].try_into().unwrap())).collect();
+        // empty the leftmost leaf via DeleteFast (no rebalance -> leaf left empty)
+        for &kn in &leaf_keys { env.delete_fast(&p, tcp, kn).unwrap(); }
+        let leaf_acct = env.pda_node(&c, tcp, leftmost).0;
+        let lam_before = env.svm.get_account(&leaf_acct).map(|a| a.lamports).unwrap_or(0);
+        // CompactLeaf (path = the all-kids[0] leftmost chain, via the old min key)
+        let path = env.path(&c, tcp, &k32(leaf_keys[0]));
+        let mut d = vec![6u8]; d.push(path.len() as u8);
+        let mut metas = vec![AccountMeta::new(env.pda_hdr(&c, tcp).0, false), AccountMeta::new(c, true)];
+        for &n in &path { metas.push(AccountMeta::new(env.pda_node(&c, tcp, n).0, false)); }
+        check!(env.run(&p, Instruction::new_with_bytes(prog, &d, metas)).is_ok(), "CompactLeaf removes the empty leftmost leaf");
+        let hd2 = env.acc(&env.pda_hdr(&c, tcp).0).unwrap();
+        let new_leftmost = u64::from_le_bytes(hd2[66..74].try_into().unwrap());
+        check!(new_leftmost != leftmost, "CompactLeaf advanced leftmost");
+        check!(lam_before > 0 && env.svm.get_account(&leaf_acct).map(|a| a.lamports).unwrap_or(0) == 0, "CompactLeaf reclaimed the leaf's rent");
+        check!(env.find(&p, tcp, 12).0, "CompactLeaf: other keys intact");
+        // a non-empty leftmost cannot be compacted
+        let nld = env.acc(&env.pda_node(&c, tcp, new_leftmost).0).unwrap();
+        let min_remaining = u32::from_be_bytes(nld[HDR + 28..HDR + 32].try_into().unwrap());
+        let path2 = env.path(&c, tcp, &k32(min_remaining));
+        let mut d2 = vec![6u8]; d2.push(path2.len() as u8);
+        let mut m2 = vec![AccountMeta::new(env.pda_hdr(&c, tcp).0, false), AccountMeta::new(c, true)];
+        for &n in &path2 { m2.push(AccountMeta::new(env.pda_node(&c, tcp, n).0, false)); }
+        check!(env.run(&p, Instruction::new_with_bytes(prog, &d2, m2)).is_err(), "CompactLeaf rejects a non-empty leftmost");
+    }
+
     // ---- security: RangeScan scratch must not be a live Torna account [round-3 fix] ----
     // owner==program is not enough -- a victim's header/node is also program-owned.
     {

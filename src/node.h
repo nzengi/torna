@@ -253,6 +253,18 @@ static inline void internal_remove_at(uint8_t *d, int pos, int F) {
     h->key_count--;
 }
 
+/* Remove the FIRST child (kids[0]) and its separator (keys[0]) from an internal node.
+ * Used by CompactLeaf to drop an emptied leftmost leaf from its parent. (internal_
+ * remove_at removes kids[pos+1], so it cannot drop kids[0].) */
+static inline void internal_remove_first(uint8_t *d, int F) {
+    NodeHeader *h = node_hdr(d);
+    uint64_t *kids = node_kids(d, F);
+    int kc = h->key_count;
+    if (kc > 1) TMEMMOVE(key_ptr(d, 0), key_ptr(d, 1), (uint64_t)(kc - 1) * KEY_SIZE);
+    for (int i = 0; i < kc; i++) kids[i] = kids[i + 1]; /* drop kids[0] */
+    h->key_count--;
+}
+
 /* ===================== leaf borrow / merge ===================== */
 
 /* Move right[0] into left's tail; parent separator at sep_pos becomes new right[0]. */
