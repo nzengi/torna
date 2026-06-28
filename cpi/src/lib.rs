@@ -20,6 +20,7 @@ use solana_program::{
     pubkey::Pubkey,
 };
 
+pub const IX_INSERT: u8 = 2;
 pub const IX_INSERT_FAST: u8 = 16;
 pub const IX_UPDATE_FAST: u8 = 17;
 pub const IX_DELETE_FAST: u8 = 18;
@@ -105,6 +106,51 @@ fn invoke_fast<'a>(
     infos.push(authority.clone());
     infos.extend(path.iter().cloned());
 
+    invoke_signed(&ix, &infos, signer_seeds)
+}
+
+/// Cold-path Insert (handles a FULL leaf by splitting via CPI-created spares). The
+/// `payer` funds the spare rent and signs; the `authority` (book PDA) authorizes and is
+/// appended so the engine's signer scan finds it. `spare_bumps` has one bump per spare.
+/// Use when InsertFast returns ERR_NEED_SPLIT_SLOT (102).
+pub fn insert_cold<'a>(
+    torna_program: &AccountInfo<'a>,
+    authority: &AccountInfo<'a>,
+    header: &AccountInfo<'a>,
+    payer: &AccountInfo<'a>,
+    alloc: &AccountInfo<'a>,
+    system: &AccountInfo<'a>,
+    path: &[AccountInfo<'a>],
+    spares: &[AccountInfo<'a>],
+    key: &[u8; 32],
+    value: &[u8],
+    rent_node: u64,
+    spare_bumps: &[u8],
+    signer_seeds: &[&[&[u8]]],
+) -> ProgramResult {
+    let mut data = vec![IX_INSERT];
+    data.extend_from_slice(key);
+    data.extend_from_slice(value);
+    data.push(path.len() as u8);
+    data.push(spares.len() as u8);
+    data.extend_from_slice(&rent_node.to_le_bytes());
+    data.extend_from_slice(spare_bumps);
+
+    let mut metas = vec![
+        AccountMeta::new(*header.key, false),
+        AccountMeta::new(*payer.key, true),
+        AccountMeta::new(*alloc.key, false),
+        AccountMeta::new_readonly(*system.key, false),
+    ];
+    for a in path { metas.push(AccountMeta::new(*a.key, false)); }
+    for a in spares { metas.push(AccountMeta::new(*a.key, false)); }
+    metas.push(AccountMeta::new_readonly(*authority.key, true)); // authorizing PDA signer
+
+    let ix = Instruction { program_id: *torna_program.key, accounts: metas, data };
+    let mut infos = vec![torna_program.clone(), header.clone(), payer.clone(), alloc.clone(), system.clone()];
+    infos.extend(path.iter().cloned());
+    infos.extend(spares.iter().cloned());
+    infos.push(authority.clone());
     invoke_signed(&ix, &infos, signer_seeds)
 }
 

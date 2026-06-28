@@ -265,6 +265,18 @@ impl Tree {
         Some(Instruction::new_with_bytes(self.program, &data, metas))
     }
 
+    /// Resolve the cold-path Insert plan for `key`: the descent path and the spare node
+    /// PDAs (height+2 of them, with bumps) the engine may consume on a split. Used to
+    /// build a cold place when InsertFast hits a full leaf (ERR_NEED_SPLIT_SLOT).
+    pub fn cold_plan(&self, r: &dyn AccountReader, key: &[u8; 32]) -> Option<(Vec<u64>, Vec<(Pubkey, u8)>)> {
+        let h = self.header(r)?;
+        let hw = self.high_water(r)?;
+        let path = self.path(r, key)?;
+        let spare_n = h.height as u64 + 2;
+        let spares = (0..spare_n).map(|i| self.node_pda(hw + 1 + i)).collect();
+        Some((path, spares))
+    }
+
     /// InitTree. `rent_hdr`/`rent_alloc` from the caller's client.
     pub fn init_tree_ix(&self, payer: Pubkey, value_size: u16, fanout: u16, rent_hdr: u64, rent_alloc: u64) -> Instruction {
         let (hdr, hb) = self.header_pda();

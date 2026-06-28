@@ -19,6 +19,7 @@ use solana_program::{
 const PLACE: u8 = 0;
 const CANCEL: u8 = 1;
 const MATCH: u8 = 2;
+const PLACE_COLD: u8 = 3;
 const ASK: u8 = 0;
 const MAXK: usize = 8;
 
@@ -82,6 +83,7 @@ fn process(_pid: &Pubkey, accounts: &[AccountInfo], data: &[u8]) -> ProgramResul
     if data.is_empty() { return Err(ProgramError::InvalidInstructionData); }
     match data[0] {
         PLACE => place(accounts, data),
+        PLACE_COLD => place_cold(accounts, data),
         CANCEL => cancel(accounts, data),
         MATCH => matcher(accounts, data),
         _ => Err(ProgramError::InvalidInstructionData),
@@ -115,6 +117,44 @@ fn place(accounts: &[AccountInfo], data: &[u8]) -> ProgramResult {
     let value = order_value(maker.key, size);
     let seeds: &[&[u8]] = &[b"book", &market_id.to_le_bytes(), &[bump]];
     torna_cpi::insert_fast(&accounts[2], &accounts[1], &accounts[3], &accounts[7..], &key, &value, &[seeds])
+}
+
+/// PlaceOrderCold: place into a FULL leaf via the cold Insert path (split). Escrow as
+/// in `place`; then a dual-signer cold Insert (maker pays spare rent + signs, the market
+/// PDA authorizes). Client resolves path+spares via torna_sdk::Tree::cold_plan.
+/// data: [3][side][price u64][size u64][slot u64][nonce u64][market_id u64][bump u8]
+///        [path_len u8][spare_count u8][rent_node u64][spare_bumps * spare_count]
+/// accounts: [maker(s), market_pda, torna, header(w), maker_src(w), vault(w), token,
+///            alloc(w), system, path(w)..., spares(w)...]
+fn place_cold(accounts: &[AccountInfo], data: &[u8]) -> ProgramResult {
+    if data.len() < 53 { return Err(ProgramError::InvalidInstructionData); }
+    let side = data[1];
+    let price = rd_u64(data, 2);
+    let size = rd_u64(data, 10);
+    let slot_est = rd_u64(data, 18);
+    let nonce = rd_u64(data, 26);
+    let market_id = rd_u64(data, 34);
+    let bump = data[42];
+    let path_len = data[43] as usize;
+    let spare_count = data[44] as usize;
+    let rent_node = rd_u64(data, 45);
+    if data.len() < 53 + spare_count { return Err(ProgramError::InvalidInstructionData); }
+    let spare_bumps = &data[53..53 + spare_count];
+    if accounts.len() < 9 + path_len + spare_count { return Err(ProgramError::NotEnoughAccountKeys); }
+    let maker = &accounts[0];
+    if !maker.is_signer { return Err(ProgramError::MissingRequiredSignature); }
+
+    let escrow = if side == ASK { size } else { price.checked_mul(size).ok_or(ProgramError::ArithmeticOverflow)? };
+    token_transfer(&accounts[6], &accounts[4], &accounts[5], maker, escrow, None)?;
+
+    let key = order_key(side, price, slot_est, maker.key, nonce);
+    let value = order_value(maker.key, size);
+    let path = &accounts[9..9 + path_len];
+    let spares = &accounts[9 + path_len..9 + path_len + spare_count];
+    let mid = market_id.to_le_bytes();
+    let seeds: &[&[u8]] = &[b"book", &mid, &[bump]];
+    torna_cpi::insert_cold(&accounts[2], &accounts[1], &accounts[3], maker, &accounts[7], &accounts[8],
+        path, spares, &key, &value, rent_node, spare_bumps, &[seeds])
 }
 
 /// CancelOrder: refund the escrow, then remove the order.

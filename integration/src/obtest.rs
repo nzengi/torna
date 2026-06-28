@@ -284,6 +284,87 @@ fn main() {
     check!(bal(&svm, &d_base.pubkey()) == 4, "BID settle: D received 4 base");
     check!(bal(&svm, &quote_vault.pubkey()) == 1220 - 860, "BID settle: quote vault 1220->360");
 
+    // ============ PlaceOrderCold: place into a FULL leaf via cold split ============
+    {
+        const F4: u16 = 4;
+        let ns4 = node_size(F4 as usize, VS as usize);
+        let ask4 = Tree::new(torna, u.pubkey(), 3); // small-fanout ask book to fill quickly
+        // setup: init (F=4), seed a high sentinel, authority -> market PDA (same PDA/vault)
+        send!([&u], ask4.init_tree_ix(u.pubkey(), VS, F4, rent(&svm, 146), rent(&svm, 32))).unwrap();
+        let s4 = keys::order_key(keys::Side::Ask, 1_000_000, 0, &u.pubkey(), 0);
+        let s4v = { let mut v = vec![0u8; VS as usize]; v[0..32].copy_from_slice(u.pubkey().as_ref()); v };
+        let ix = { let r = R(&svm); ask4.insert_ix(&r, u.pubkey(), &s4, &s4v, rent(&svm, ns4)).unwrap() };
+        send!([&u], ix).unwrap();
+        let mut d = vec![11u8]; d.extend_from_slice(market_pda.as_ref());
+        send!([&u], Instruction::new_with_bytes(torna, &d,
+            vec![AccountMeta::new(ask4.header_pda().0, false), AccountMeta::new_readonly(u.pubkey(), true)])).unwrap();
+
+        // maker E with 4 base to escrow
+        let e = Keypair::new(); svm.airdrop(&e.pubkey(), 1_000_000_000).unwrap();
+        let e_base = mk_acct(&mut svm, &base_mint.pubkey(), &e.pubkey());
+        send!([&u], mint_to(&base_mint.pubkey(), &e_base.pubkey(), 4)).unwrap();
+
+        // PlaceOrder (InsertFast) helper on ask4 -> Result
+        let place_hot = |svm: &mut LiteSVM, price: u64, nonce: u64| -> Result<(), String> {
+            let key = keys::order_key(keys::Side::Ask, price, 0, &e.pubkey(), nonce);
+            let path = { let r = R(svm); ask4.path(&r, &key).unwrap() };
+            let mut data = vec![0u8, ASK];
+            data.extend_from_slice(&price.to_le_bytes()); data.extend_from_slice(&1u64.to_le_bytes());
+            data.extend_from_slice(&0u64.to_le_bytes()); data.extend_from_slice(&nonce.to_le_bytes());
+            data.extend_from_slice(&MARKET_ID.to_le_bytes()); data.push(bump);
+            let mut metas = vec![
+                AccountMeta::new(e.pubkey(), true), AccountMeta::new_readonly(market_pda, false),
+                AccountMeta::new_readonly(torna, false), AccountMeta::new_readonly(ask4.header_pda().0, false),
+                AccountMeta::new(e_base.pubkey(), false), AccountMeta::new(base_vault.pubkey(), false),
+                AccountMeta::new_readonly(token, false),
+            ];
+            for (i, &n) in path.iter().enumerate() {
+                let pk = ask4.node_pda(n).0;
+                metas.push(if i == path.len() - 1 { AccountMeta::new(pk, false) } else { AccountMeta::new_readonly(pk, false) });
+            }
+            let bh = svm.latest_blockhash();
+            let tx = Transaction::new(&[&e], Message::new(&[Instruction::new_with_bytes(orderbook, &data, metas)], Some(&e.pubkey())), bh);
+            svm.send_transaction(tx).map(|_| ()).map_err(|m| format!("{:?}", m.err))
+        };
+        // fill the leaf to F=4 (seed@1M + 3 asks); the 4th hot place overflows -> fails
+        place_hot(&mut svm, 200, 1).unwrap();
+        place_hot(&mut svm, 201, 2).unwrap();
+        place_hot(&mut svm, 202, 3).unwrap();
+        check!(place_hot(&mut svm, 203, 4).is_err(), "ColdPlace: InsertFast into a full leaf fails");
+
+        // PlaceOrderCold for the overflowing order -> splits and succeeds
+        let key = keys::order_key(keys::Side::Ask, 203, 0, &e.pubkey(), 4);
+        let (path, spares) = { let r = R(&svm); ask4.cold_plan(&r, &key).unwrap() };
+        let mut data = vec![3u8, ASK];
+        data.extend_from_slice(&203u64.to_le_bytes()); data.extend_from_slice(&1u64.to_le_bytes());
+        data.extend_from_slice(&0u64.to_le_bytes()); data.extend_from_slice(&4u64.to_le_bytes());
+        data.extend_from_slice(&MARKET_ID.to_le_bytes()); data.push(bump);
+        data.push(path.len() as u8); data.push(spares.len() as u8);
+        data.extend_from_slice(&rent(&svm, ns4).to_le_bytes());
+        for (_, b) in &spares { data.push(*b); }
+        let mut metas = vec![
+            AccountMeta::new(e.pubkey(), true), AccountMeta::new_readonly(market_pda, false),
+            AccountMeta::new_readonly(torna, false), AccountMeta::new(ask4.header_pda().0, false),
+            AccountMeta::new(e_base.pubkey(), false), AccountMeta::new(base_vault.pubkey(), false),
+            AccountMeta::new_readonly(token, false), AccountMeta::new(ask4.alloc_pda().0, false),
+            AccountMeta::new_readonly(Pubkey::default(), false), // system
+        ];
+        for &n in &path { metas.push(AccountMeta::new(ask4.node_pda(n).0, false)); }
+        for (pk, _) in &spares { metas.push(AccountMeta::new(*pk, false)); }
+        let vault_before = bal(&svm, &base_vault.pubkey());
+        check!(send!([&e], Instruction::new_with_bytes(orderbook, &data, metas)).is_ok(), "ColdPlace: cold Insert (split) via PDA succeeds");
+        check!({ let r = R(&svm); ask4.get(&r, &key).is_some() }, "ColdPlace: overflow order landed");
+        check!({ let r = R(&svm); ask4.header(&r).map(|h| h.height) } == Some(2), "ColdPlace: tree split (height 1->2)");
+        check!(bal(&svm, &base_vault.pubkey()) == vault_before + 1, "ColdPlace: escrow happened");
+        // all four E orders present after the split
+        let mut all = true;
+        for (p, n) in [(200u64, 1u64), (201, 2), (202, 3), (203, 4)] {
+            let k = keys::order_key(keys::Side::Ask, p, 0, &e.pubkey(), n);
+            if { let r = R(&svm); ask4.get(&r, &k).is_none() } { all = false; }
+        }
+        check!(all, "ColdPlace: all orders survive the split");
+    }
+
     println!("\nobtest (orderbook + token settlement): pass={pass} fail={fail} -> {}",
              if fail == 0 { "ALL PASS" } else { "FAILURES" });
     std::process::exit(if fail == 0 { 0 } else { 1 });
