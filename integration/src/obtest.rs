@@ -101,8 +101,21 @@ fn main() {
         kp
     };
     let base_vault = mk_acct(&mut svm, &base_mint.pubkey(), &market_pda);
-    let a_base = mk_acct(&mut svm, &base_mint.pubkey(), &Pubkey::new_unique()); // placeholder owner; A set below
-    let _ = a_base; // re-created per maker below
+    let quote_vault = mk_acct(&mut svm, &quote_mint.pubkey(), &market_pda);
+    // InitMarket: program creates + writes the market config (canonical mints + vaults)
+    let (market_cfg, cfg_bump) = Pubkey::find_program_address(&[b"mkt", &MARKET_ID.to_le_bytes()], &orderbook);
+    {
+        let mut d = vec![4u8]; d.extend_from_slice(&MARKET_ID.to_le_bytes());
+        d.push(bump); d.push(cfg_bump); d.extend_from_slice(&rent(&svm, 133).to_le_bytes());
+        let metas = vec![
+            AccountMeta::new(u.pubkey(), true), AccountMeta::new(market_cfg, false),
+            AccountMeta::new_readonly(market_pda, false),
+            AccountMeta::new_readonly(base_mint.pubkey(), false), AccountMeta::new_readonly(quote_mint.pubkey(), false),
+            AccountMeta::new_readonly(base_vault.pubkey(), false), AccountMeta::new_readonly(quote_vault.pubkey(), false),
+            AccountMeta::new_readonly(Pubkey::default(), false),
+        ];
+        send!([&u], Instruction::new_with_bytes(orderbook, &d, metas)).expect("init market");
+    }
 
     // makers A, B and the taker, each with their token accounts
     let (a, b, taker) = (Keypair::new(), Keypair::new(), Keypair::new());
@@ -129,6 +142,33 @@ fn main() {
     send!([&u], Instruction::new_with_bytes(torna, &d,
         vec![AccountMeta::new(ask.header_pda().0, false), AccountMeta::new_readonly(u.pubkey(), true)])).unwrap();
 
+    // ---- security: the market config rejects wrong-mint / wrong-vault settlement ----
+    {
+        let key = keys::order_key(keys::Side::Ask, 500, 0, &a.pubkey(), 99);
+        let path = { let r = R(&svm); ask.path(&r, &key).unwrap() };
+        let mk = |src: Pubkey, vault: Pubkey| -> Instruction {
+            let mut data = vec![0u8, ASK];
+            data.extend_from_slice(&500u64.to_le_bytes()); data.extend_from_slice(&1u64.to_le_bytes());
+            data.extend_from_slice(&0u64.to_le_bytes()); data.extend_from_slice(&99u64.to_le_bytes());
+            data.extend_from_slice(&MARKET_ID.to_le_bytes()); data.push(bump);
+            let mut m = vec![
+                AccountMeta::new(a.pubkey(), true), AccountMeta::new_readonly(market_pda, false),
+                AccountMeta::new_readonly(torna, false), AccountMeta::new_readonly(ask.header_pda().0, false),
+                AccountMeta::new(src, false), AccountMeta::new(vault, false),
+                AccountMeta::new_readonly(token, false), AccountMeta::new_readonly(market_cfg, false),
+            ];
+            for (i, &n) in path.iter().enumerate() {
+                let pk = ask.node_pda(n).0;
+                m.push(if i == path.len() - 1 { AccountMeta::new(pk, false) } else { AccountMeta::new_readonly(pk, false) });
+            }
+            Instruction::new_with_bytes(orderbook, &data, m)
+        };
+        // wrong source mint (quote acct for an ASK that locks base) -> rejected
+        check!(send!([&a], mk(a_quote.pubkey(), base_vault.pubkey())).is_err(), "wrong-mint escrow source rejected");
+        // wrong vault (quote_vault for an ASK) -> rejected
+        check!(send!([&a], mk(a_base.pubkey(), quote_vault.pubkey())).is_err(), "wrong escrow vault rejected");
+    }
+
     // ---- PlaceOrder (escrow base into the vault) ----
     let place = |svm: &mut LiteSVM, maker: &Keypair, maker_base: &Pubkey, price: u64, size: u64, nonce: u64| -> [u8; 32] {
         let key = keys::order_key(keys::Side::Ask, price, 0, &maker.pubkey(), nonce);
@@ -141,7 +181,7 @@ fn main() {
             AccountMeta::new(maker.pubkey(), true), AccountMeta::new_readonly(market_pda, false),
             AccountMeta::new_readonly(torna, false), AccountMeta::new_readonly(ask.header_pda().0, false),
             AccountMeta::new(*maker_base, false), AccountMeta::new(base_vault.pubkey(), false),
-            AccountMeta::new_readonly(token, false),
+            AccountMeta::new_readonly(token, false), AccountMeta::new_readonly(market_cfg, false),
         ];
         for (i, &n) in path.iter().enumerate() {
             let pk = ask.node_pda(n).0;
@@ -166,7 +206,7 @@ fn main() {
         AccountMeta::new(taker.pubkey(), true), AccountMeta::new_readonly(market_pda, false),
         AccountMeta::new_readonly(torna, false), AccountMeta::new_readonly(ask.header_pda().0, false),
         AccountMeta::new(base_vault.pubkey(), false), AccountMeta::new(t_base.pubkey(), false),
-        AccountMeta::new(t_quote.pubkey(), false), AccountMeta::new_readonly(token, false),
+        AccountMeta::new(t_quote.pubkey(), false), AccountMeta::new_readonly(token, false), AccountMeta::new_readonly(market_cfg, false),
         AccountMeta::new(a_quote.pubkey(), false), AccountMeta::new(b_quote.pubkey(), false), // maker_quote[0..2]
     ];
     for (i, &n) in path.iter().enumerate() {
@@ -193,7 +233,7 @@ fn main() {
         AccountMeta::new(b.pubkey(), true), AccountMeta::new_readonly(market_pda, false),
         AccountMeta::new_readonly(torna, false), AccountMeta::new_readonly(ask.header_pda().0, false),
         AccountMeta::new(base_vault.pubkey(), false), AccountMeta::new(b_base.pubkey(), false),
-        AccountMeta::new_readonly(token, false),
+        AccountMeta::new_readonly(token, false), AccountMeta::new_readonly(market_cfg, false),
     ];
     for (i, &n) in path.iter().enumerate() {
         let pk = ask.node_pda(n).0;
@@ -206,7 +246,7 @@ fn main() {
     // ================= BID side: a taker SELL matches the bid book =================
     const BID: u8 = 1;
     let bid = Tree::new(torna, u.pubkey(), 2); // the bid book (tree_id 2, same market PDA)
-    let quote_vault = mk_acct(&mut svm, &quote_mint.pubkey(), &market_pda);
+    // uses the canonical quote_vault (created up front, stored in the market config)
     // bid book setup: init, seed a low (worst) bid so it sorts last, authority -> PDA
     send!([&u], bid.init_tree_ix(u.pubkey(), VS, F, rent(&svm, 146), rent(&svm, 32))).unwrap();
     let bseed = keys::order_key(keys::Side::Bid, 1, 0, &u.pubkey(), 0);
@@ -242,7 +282,7 @@ fn main() {
             AccountMeta::new(maker.pubkey(), true), AccountMeta::new_readonly(market_pda, false),
             AccountMeta::new_readonly(torna, false), AccountMeta::new_readonly(bid.header_pda().0, false),
             AccountMeta::new(*src, false), AccountMeta::new(quote_vault.pubkey(), false),
-            AccountMeta::new_readonly(token, false),
+            AccountMeta::new_readonly(token, false), AccountMeta::new_readonly(market_cfg, false),
         ];
         for (i, &n) in path.iter().enumerate() {
             let pk = bid.node_pda(n).0;
@@ -266,7 +306,7 @@ fn main() {
         AccountMeta::new(t2.pubkey(), true), AccountMeta::new_readonly(market_pda, false),
         AccountMeta::new_readonly(torna, false), AccountMeta::new_readonly(bid.header_pda().0, false),
         AccountMeta::new(quote_vault.pubkey(), false), AccountMeta::new(t2_quote.pubkey(), false),
-        AccountMeta::new(t2_base.pubkey(), false), AccountMeta::new_readonly(token, false),
+        AccountMeta::new(t2_base.pubkey(), false), AccountMeta::new_readonly(token, false), AccountMeta::new_readonly(market_cfg, false),
         AccountMeta::new(c_base.pubkey(), false), AccountMeta::new(d_base.pubkey(), false),
     ];
     for (i, &n) in path.iter().enumerate() {
@@ -316,7 +356,7 @@ fn main() {
                 AccountMeta::new(e.pubkey(), true), AccountMeta::new_readonly(market_pda, false),
                 AccountMeta::new_readonly(torna, false), AccountMeta::new_readonly(ask4.header_pda().0, false),
                 AccountMeta::new(e_base.pubkey(), false), AccountMeta::new(base_vault.pubkey(), false),
-                AccountMeta::new_readonly(token, false),
+                AccountMeta::new_readonly(token, false), AccountMeta::new_readonly(market_cfg, false),
             ];
             for (i, &n) in path.iter().enumerate() {
                 let pk = ask4.node_pda(n).0;
@@ -346,7 +386,7 @@ fn main() {
             AccountMeta::new(e.pubkey(), true), AccountMeta::new_readonly(market_pda, false),
             AccountMeta::new_readonly(torna, false), AccountMeta::new(ask4.header_pda().0, false),
             AccountMeta::new(e_base.pubkey(), false), AccountMeta::new(base_vault.pubkey(), false),
-            AccountMeta::new_readonly(token, false), AccountMeta::new(ask4.alloc_pda().0, false),
+            AccountMeta::new_readonly(token, false), AccountMeta::new_readonly(market_cfg, false), AccountMeta::new(ask4.alloc_pda().0, false),
             AccountMeta::new_readonly(Pubkey::default(), false), // system
         ];
         for &n in &path { metas.push(AccountMeta::new(ask4.node_pda(n).0, false)); }
@@ -385,7 +425,7 @@ fn main() {
             AccountMeta::new(taker3.pubkey(), true), AccountMeta::new_readonly(market_pda, false),
             AccountMeta::new_readonly(torna, false), AccountMeta::new_readonly(ask4.header_pda().0, false),
             AccountMeta::new(base_vault.pubkey(), false), AccountMeta::new(t3_base.pubkey(), false),
-            AccountMeta::new(t3_quote.pubkey(), false), AccountMeta::new_readonly(token, false),
+            AccountMeta::new(t3_quote.pubkey(), false), AccountMeta::new_readonly(token, false), AccountMeta::new_readonly(market_cfg, false),
         ];
         for _ in 0..4 { metas.push(AccountMeta::new(e_quote.pubkey(), false)); } // maker_recv[4] (all E)
         for grp in [&p0, &p1] {

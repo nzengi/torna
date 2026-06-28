@@ -20,13 +20,20 @@ const PLACE: u8 = 0;
 const CANCEL: u8 = 1;
 const MATCH: u8 = 2;
 const PLACE_COLD: u8 = 3;
+const INIT_MARKET: u8 = 4;
 const ASK: u8 = 0;
 const MAXK: usize = 8;
 
-// SPL Token program + token-account layout
+// SPL Token program + token-account layout (mint @0, owner @32, amount @64)
 const TOKEN_PROGRAM: Pubkey = solana_program::pubkey!("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
+const TA_MINT: usize = 0;
 const TA_OWNER: usize = 32;
 const TOKEN_TRANSFER: u8 = 3;
+
+// Market config PDA [b"mkt", market_id]: the canonical mints + vaults of a market, so
+// Match/Place/Cancel can't be tricked into wrong-mint settlement or vault-swap theft.
+const MARKET_MAGIC: u32 = 0x344b_544d; // "MTK4"
+const MARKET_SIZE: usize = 133; // magic(4) + cfg_bump(1) + base_mint,quote_mint,base_vault,quote_vault (4*32)
 
 // torna node/header layout (mirrors abi.md)
 const NODE_HDR: usize = 44;
@@ -61,6 +68,89 @@ fn price_of(book_side: u8, key: &[u8; 32]) -> u64 {
     if book_side == ASK { p } else { u64::MAX - p }
 }
 
+// ---- Market config (canonical mints + vaults) ----
+struct Cfg { base_mint: [u8; 32], quote_mint: [u8; 32], base_vault: [u8; 32], quote_vault: [u8; 32] }
+
+fn ta_field(a: &AccountInfo, off: usize) -> Result<[u8; 32], ProgramError> {
+    let d = a.try_borrow_data()?;
+    if d.len() < 72 { return Err(ProgramError::InvalidAccountData); } // not a token account
+    Ok(d[off..off + 32].try_into().unwrap())
+}
+
+/// Read + authenticate the market config: program-owned, right magic, and the canonical
+/// [b"mkt", market_id] PDA (re-derived from its own stored bump). Returns the config.
+fn read_cfg(cfg: &AccountInfo, program_id: &Pubkey, market_id: u64) -> Result<Cfg, ProgramError> {
+    if cfg.owner != program_id { return Err(ProgramError::IncorrectProgramId); }
+    let d = cfg.try_borrow_data()?;
+    if d.len() < MARKET_SIZE || u32::from_le_bytes(d[0..4].try_into().unwrap()) != MARKET_MAGIC {
+        return Err(ProgramError::InvalidAccountData);
+    }
+    let bump = d[4];
+    let mid = market_id.to_le_bytes();
+    let derived = Pubkey::create_program_address(&[b"mkt", &mid, &[bump]], program_id)
+        .map_err(|_| ProgramError::InvalidArgument)?;
+    if derived != *cfg.key { return Err(ProgramError::InvalidArgument); }
+    Ok(Cfg {
+        base_mint: d[5..37].try_into().unwrap(),
+        quote_mint: d[37..69].try_into().unwrap(),
+        base_vault: d[69..101].try_into().unwrap(),
+        quote_vault: d[101..133].try_into().unwrap(),
+    })
+}
+
+/// InitMarket: create + write the market config PDA after validating the vaults are the
+/// book PDA's token accounts of the declared mints. One-time per market.
+/// data: [4][market_id u64][book_bump u8][cfg_bump u8][rent u64]
+/// accounts: [payer(s,w), market_cfg(w), book_pda, base_mint, quote_mint, base_vault,
+///            quote_vault, system]
+fn init_market(program_id: &Pubkey, accounts: &[AccountInfo], data: &[u8]) -> ProgramResult {
+    if data.len() < 19 { return Err(ProgramError::InvalidInstructionData); }
+    if accounts.len() < 8 { return Err(ProgramError::NotEnoughAccountKeys); }
+    let market_id = rd_u64(data, 1);
+    let book_bump = data[9];
+    let cfg_bump = data[10];
+    let rent = rd_u64(data, 11);
+    let (payer, cfg, book) = (&accounts[0], &accounts[1], &accounts[2]);
+    let (base_mint, quote_mint, base_vault, quote_vault) =
+        (&accounts[3], &accounts[4], &accounts[5], &accounts[6]);
+    if !payer.is_signer { return Err(ProgramError::MissingRequiredSignature); }
+    let mid = market_id.to_le_bytes();
+
+    // the book authority PDA must be the canonical [b"book", market_id]
+    let book_derived = Pubkey::create_program_address(&[b"book", &mid, &[book_bump]], program_id)
+        .map_err(|_| ProgramError::InvalidArgument)?;
+    if book_derived != *book.key { return Err(ProgramError::InvalidArgument); }
+    // vaults must be the book PDA's token accounts of the declared mints
+    if ta_field(base_vault, TA_OWNER)? != book.key.to_bytes() || ta_field(base_vault, TA_MINT)? != base_mint.key.to_bytes() {
+        return Err(ProgramError::InvalidArgument);
+    }
+    if ta_field(quote_vault, TA_OWNER)? != book.key.to_bytes() || ta_field(quote_vault, TA_MINT)? != quote_mint.key.to_bytes() {
+        return Err(ProgramError::InvalidArgument);
+    }
+
+    // create the config PDA (program-owned), signed by its seeds
+    let mut cd = vec![0u8; 4];
+    cd.extend_from_slice(&rent.to_le_bytes());
+    cd.extend_from_slice(&(MARKET_SIZE as u64).to_le_bytes());
+    cd.extend_from_slice(program_id.as_ref());
+    let create = Instruction {
+        program_id: Pubkey::default(), // system program
+        accounts: vec![AccountMeta::new(*payer.key, true), AccountMeta::new(*cfg.key, true)],
+        data: cd,
+    };
+    invoke_signed(&create, &[payer.clone(), cfg.clone(), accounts[7].clone()],
+        &[&[b"mkt", &mid, &[cfg_bump]]])?;
+
+    let mut d = cfg.try_borrow_mut_data()?;
+    d[0..4].copy_from_slice(&MARKET_MAGIC.to_le_bytes());
+    d[4] = cfg_bump;
+    d[5..37].copy_from_slice(base_mint.key.as_ref());
+    d[37..69].copy_from_slice(quote_mint.key.as_ref());
+    d[69..101].copy_from_slice(base_vault.key.as_ref());
+    d[101..133].copy_from_slice(quote_vault.key.as_ref());
+    Ok(())
+}
+
 /// SPL-Token Transfer CPI. `seeds` = Some(market PDA seeds) when the vault (PDA-owned)
 /// is the source; None when the signer authorizes (e.g. the maker/taker).
 fn token_transfer<'a>(
@@ -80,24 +170,25 @@ fn token_transfer<'a>(
     match seeds { Some(s) => invoke_signed(&ix, &infos, s), None => invoke(&ix, &infos) }
 }
 
-fn process(_pid: &Pubkey, accounts: &[AccountInfo], data: &[u8]) -> ProgramResult {
+fn process(pid: &Pubkey, accounts: &[AccountInfo], data: &[u8]) -> ProgramResult {
     if data.is_empty() { return Err(ProgramError::InvalidInstructionData); }
     match data[0] {
-        PLACE => place(accounts, data),
-        PLACE_COLD => place_cold(accounts, data),
-        CANCEL => cancel(accounts, data),
-        MATCH => matcher(accounts, data),
+        PLACE => place(pid, accounts, data),
+        PLACE_COLD => place_cold(pid, accounts, data),
+        CANCEL => cancel(pid, accounts, data),
+        MATCH => matcher(pid, accounts, data),
+        INIT_MARKET => init_market(pid, accounts, data),
         _ => Err(ProgramError::InvalidInstructionData),
     }
 }
 
 /// PlaceOrder (ask): escrow `size` base into the vault, then insert into the ask book.
 /// data: [0][side][price u64][size u64][slot_est u64][nonce u64][market_id u64][bump u8]
-/// accounts: [maker(s), market_pda, torna, header, maker_base(w), base_vault(w),
-///            token_program, path(leaf w)]
-fn place(accounts: &[AccountInfo], data: &[u8]) -> ProgramResult {
+/// accounts: [maker(s), market_pda, torna, header, maker_src(w), vault(w),
+///            token_program, market_cfg, path(leaf w)]
+fn place(program_id: &Pubkey, accounts: &[AccountInfo], data: &[u8]) -> ProgramResult {
     if data.len() < 43 { return Err(ProgramError::InvalidInstructionData); }
-    if accounts.len() < 8 { return Err(ProgramError::NotEnoughAccountKeys); }
+    if accounts.len() < 9 { return Err(ProgramError::NotEnoughAccountKeys); }
     let side = data[1];
     let price = rd_u64(data, 2);
     let size = rd_u64(data, 10);
@@ -108,16 +199,20 @@ fn place(accounts: &[AccountInfo], data: &[u8]) -> ProgramResult {
     let maker = &accounts[0];
     if !maker.is_signer { return Err(ProgramError::MissingRequiredSignature); }
 
-    // escrow into the vault (maker authorizes; they are the tx signer). ASK makers lock
-    // `size` base; BID makers lock `price*size` quote. The client passes the matching
-    // source account (maker_base/maker_quote) and vault (base/quote).
+    // bind the escrow to the market's canonical vault + mint (per side)
+    let cfg = read_cfg(&accounts[7], program_id, market_id)?;
+    let (want_vault, want_mint) = if side == ASK { (cfg.base_vault, cfg.base_mint) } else { (cfg.quote_vault, cfg.quote_mint) };
+    if accounts[5].key.to_bytes() != want_vault { return Err(ProgramError::InvalidArgument); }
+    if ta_field(&accounts[4], TA_MINT)? != want_mint { return Err(ProgramError::InvalidArgument); }
+
+    // escrow into the vault (maker authorizes). ASK locks `size` base; BID `price*size` quote.
     let escrow = if side == ASK { size } else { price.checked_mul(size).ok_or(ProgramError::ArithmeticOverflow)? };
     token_transfer(&accounts[6], &accounts[4], &accounts[5], maker, escrow, None)?;
 
     let key = order_key(side, price, slot_est, maker.key, nonce);
     let value = order_value(maker.key, size);
     let seeds: &[&[u8]] = &[b"book", &market_id.to_le_bytes(), &[bump]];
-    torna_cpi::insert_fast(&accounts[2], &accounts[1], &accounts[3], &accounts[7..], &key, &value, &[seeds])
+    torna_cpi::insert_fast(&accounts[2], &accounts[1], &accounts[3], &accounts[8..], &key, &value, &[seeds])
 }
 
 /// PlaceOrderCold: place into a FULL leaf via the cold Insert path (split). Escrow as
@@ -126,8 +221,8 @@ fn place(accounts: &[AccountInfo], data: &[u8]) -> ProgramResult {
 /// data: [3][side][price u64][size u64][slot u64][nonce u64][market_id u64][bump u8]
 ///        [path_len u8][spare_count u8][rent_node u64][spare_bumps * spare_count]
 /// accounts: [maker(s), market_pda, torna, header(w), maker_src(w), vault(w), token,
-///            alloc(w), system, path(w)..., spares(w)...]
-fn place_cold(accounts: &[AccountInfo], data: &[u8]) -> ProgramResult {
+///            alloc(w), system, market_cfg, path(w)..., spares(w)...]
+fn place_cold(program_id: &Pubkey, accounts: &[AccountInfo], data: &[u8]) -> ProgramResult {
     if data.len() < 53 { return Err(ProgramError::InvalidInstructionData); }
     let side = data[1];
     let price = rd_u64(data, 2);
@@ -141,30 +236,35 @@ fn place_cold(accounts: &[AccountInfo], data: &[u8]) -> ProgramResult {
     let rent_node = rd_u64(data, 45);
     if data.len() < 53 + spare_count { return Err(ProgramError::InvalidInstructionData); }
     let spare_bumps = &data[53..53 + spare_count];
-    if accounts.len() < 9 + path_len + spare_count { return Err(ProgramError::NotEnoughAccountKeys); }
+    if accounts.len() < 10 + path_len + spare_count { return Err(ProgramError::NotEnoughAccountKeys); }
     let maker = &accounts[0];
     if !maker.is_signer { return Err(ProgramError::MissingRequiredSignature); }
+
+    let cfg = read_cfg(&accounts[7], program_id, market_id)?; // [.. token(6), cfg(7), alloc(8), system(9), path(10)]
+    let (want_vault, want_mint) = if side == ASK { (cfg.base_vault, cfg.base_mint) } else { (cfg.quote_vault, cfg.quote_mint) };
+    if accounts[5].key.to_bytes() != want_vault { return Err(ProgramError::InvalidArgument); }
+    if ta_field(&accounts[4], TA_MINT)? != want_mint { return Err(ProgramError::InvalidArgument); }
 
     let escrow = if side == ASK { size } else { price.checked_mul(size).ok_or(ProgramError::ArithmeticOverflow)? };
     token_transfer(&accounts[6], &accounts[4], &accounts[5], maker, escrow, None)?;
 
     let key = order_key(side, price, slot_est, maker.key, nonce);
     let value = order_value(maker.key, size);
-    let path = &accounts[9..9 + path_len];
-    let spares = &accounts[9 + path_len..9 + path_len + spare_count];
+    let path = &accounts[10..10 + path_len];
+    let spares = &accounts[10 + path_len..10 + path_len + spare_count];
     let mid = market_id.to_le_bytes();
     let seeds: &[&[u8]] = &[b"book", &mid, &[bump]];
-    torna_cpi::insert_cold(&accounts[2], &accounts[1], &accounts[3], maker, &accounts[7], &accounts[8],
+    torna_cpi::insert_cold(&accounts[2], &accounts[1], &accounts[3], maker, &accounts[8], &accounts[9],
         path, spares, &key, &value, rent_node, spare_bumps, &[seeds])
 }
 
 /// CancelOrder: refund the escrow, then remove the order.
 /// data: [1][key 32][side u8][market_id u64][bump u8]
 /// accounts: [maker(s), market_pda, torna, header, vault(w), maker_dst(w),
-///            token_program, path(leaf w)]  (vault/dst = base for ASK, quote for BID)
-fn cancel(accounts: &[AccountInfo], data: &[u8]) -> ProgramResult {
+///            token_program, market_cfg, path(leaf w)]  (vault/dst = base ASK, quote BID)
+fn cancel(program_id: &Pubkey, accounts: &[AccountInfo], data: &[u8]) -> ProgramResult {
     if data.len() < 43 { return Err(ProgramError::InvalidInstructionData); }
-    if accounts.len() < 8 { return Err(ProgramError::NotEnoughAccountKeys); }
+    if accounts.len() < 9 { return Err(ProgramError::NotEnoughAccountKeys); }
     let key: [u8; 32] = data[1..33].try_into().unwrap();
     let side = data[33];
     let market_id = rd_u64(data, 34);
@@ -172,6 +272,11 @@ fn cancel(accounts: &[AccountInfo], data: &[u8]) -> ProgramResult {
     let maker = &accounts[0];
     if !maker.is_signer { return Err(ProgramError::MissingRequiredSignature); }
     if key[16..24] != maker.key.to_bytes()[0..8] { return Err(ProgramError::IllegalOwner); }
+
+    let cfg = read_cfg(&accounts[7], program_id, market_id)?;
+    let (want_vault, want_mint) = if side == ASK { (cfg.base_vault, cfg.base_mint) } else { (cfg.quote_vault, cfg.quote_mint) };
+    if accounts[4].key.to_bytes() != want_vault { return Err(ProgramError::InvalidArgument); }
+    if ta_field(&accounts[5], TA_MINT)? != want_mint { return Err(ProgramError::InvalidArgument); }
 
     // refund = what was escrowed: ASK -> size base; BID -> price*size quote
     let size = order_size_in_leaf(&accounts[3], accounts.last().unwrap(), &key)?;
@@ -181,7 +286,7 @@ fn cancel(accounts: &[AccountInfo], data: &[u8]) -> ProgramResult {
     let mid = market_id.to_le_bytes();
     let seeds: &[&[u8]] = &[b"book", &mid, &[bump]];
     token_transfer(&accounts[6], &accounts[4], &accounts[5], &accounts[1], refund, Some(&[seeds]))?;
-    torna_cpi::delete_fast(&accounts[2], &accounts[1], &accounts[3], &accounts[7..], &key, &[seeds])
+    torna_cpi::delete_fast(&accounts[2], &accounts[1], &accounts[3], &accounts[8..], &key, &[seeds])
 }
 
 /// Read the size of `key` from a leaf (returns err if absent).
@@ -202,10 +307,10 @@ fn order_size_in_leaf(header: &AccountInfo, leaf: &AccountInfo, key: &[u8; 32]) 
 
 /// Match a buy taker against the ask book's best leaf, settling tokens atomically.
 /// data: [2][book_side u8][limit u64][size u64][max_fills u8][market_id u64][bump u8]
-/// accounts: [taker(s), market_pda, torna, header, base_vault(w), taker_base(w),
-///            taker_quote(w), token_program, maker_quote[0..K](w), path(leaf w)]
+/// accounts: [taker(s), market_pda, torna, header, vault(w), taker_recv(w),
+///            taker_pay(w), token_program, market_cfg, maker_recv[0..K](w), path(leaf w)]
 /// return_data: [n][(maker 32, price_be u64, fill_be u64)*n].
-fn matcher(accounts: &[AccountInfo], data: &[u8]) -> ProgramResult {
+fn matcher(program_id: &Pubkey, accounts: &[AccountInfo], data: &[u8]) -> ProgramResult {
     if data.len() < 30 { return Err(ProgramError::InvalidInstructionData); }
     let book_side = data[1];
     let limit = rd_u64(data, 2);
@@ -217,9 +322,21 @@ fn matcher(accounts: &[AccountInfo], data: &[u8]) -> ProgramResult {
     let height = data[29] as usize;
     if num_leaves == 0 || height == 0 { return Err(ProgramError::InvalidInstructionData); }
     if !accounts[0].is_signer { return Err(ProgramError::MissingRequiredSignature); }
-    let base = 8 + max_fills; // leaf groups (num_leaves x height) start here
+    let base = 9 + max_fills; // [8 fixed + market_cfg] then maker_recv[K] then leaf groups
     if accounts.len() < base + num_leaves * height { return Err(ProgramError::NotEnoughAccountKeys); }
     let header = &accounts[3];
+
+    // bind settlement to the market's canonical vault + mints (per book side)
+    let cfg = read_cfg(&accounts[8], program_id, market_id)?;
+    let (want_vault, recv_mint, pay_mint) = if book_side == ASK {
+        (cfg.base_vault, cfg.base_mint, cfg.quote_mint)
+    } else {
+        (cfg.quote_vault, cfg.quote_mint, cfg.base_mint)
+    };
+    if accounts[4].key.to_bytes() != want_vault { return Err(ProgramError::InvalidArgument); }
+    if ta_field(&accounts[5], TA_MINT)? != recv_mint || ta_field(&accounts[6], TA_MINT)? != pay_mint {
+        return Err(ProgramError::InvalidArgument);
+    }
     let leaf_of = |g: usize| &accounts[base + g * height + (height - 1)]; // the leaf in group g
 
     let mut keys = [[0u8; 32]; MAXK];
@@ -268,9 +385,11 @@ fn matcher(accounts: &[AccountInfo], data: &[u8]) -> ProgramResult {
         // settle. ASK book (taker buy): release `fill` base from vault -> taker, collect
         // `price*fill` quote taker -> maker. BID book (taker sell): mirror. The order is
         // mutated through its OWN leaf-group path (the sweep may span leaves).
-        let maker_recv = &accounts[8 + j];
-        if maker_recv.try_borrow_data()?[TA_OWNER..TA_OWNER + 32] != makers[j] {
-            return Err(ProgramError::IllegalOwner);
+        let maker_recv = &accounts[9 + j];
+        {
+            let md = maker_recv.try_borrow_data()?;
+            if md.len() < 72 || md[TA_OWNER..TA_OWNER + 32] != makers[j] { return Err(ProgramError::IllegalOwner); }
+            if md[TA_MINT..TA_MINT + 32] != pay_mint { return Err(ProgramError::InvalidArgument); } // maker must be paid the canonical mint
         }
         let quote_amt = prices[j].checked_mul(fills[j]).ok_or(ProgramError::ArithmeticOverflow)?;
         let (release, collect) = if book_side == ASK { (fills[j], quote_amt) } else { (quote_amt, fills[j]) };
