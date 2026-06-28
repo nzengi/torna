@@ -1,0 +1,36 @@
+[package]
+name = "torna-integration"
+version = "0.1.0"
+edition = "2021"
+
+# On-chain integration tests against torna/sbf/out/torna.so via LiteSVM.
+#   smoke   : InitTree + insert/find + forward/reverse RangeScan
+#   inttest : full surface + security regressions + CU guards
+
+[[bin]]
+name = "smoke"
+path = "src/smoke.rs"
+
+[[bin]]
+name = "inttest"
+path = "src/inttest.rs"
+
+[dependencies]
+litesvm = "0.10"
+solana-sdk = "3.0"
+
+[[bin]]
+name = "difftest"
+path = "src/difftest.rs"
+
+[[bin]]
+name = "fuzz"
+path = "src/fuzz.rs"
+
+[[bin]]
+name = "cu"
+path = "src/cu.rs"
+
+[[bin]]
+name = "cpitest"
+path = "src/cpitest.rs"
