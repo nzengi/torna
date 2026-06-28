@@ -1,0 +1,16 @@
+[package]
+name = "torna-sdk"
+version = "0.1.0"
+edition = "2021"
+
+# Typed client SDK for Torna. The PathPlanner resolves the on-chain account set
+# (header / path / spares) off-chain so integrators never touch node_idx, bumps,
+# or paths -- they call insert/update/delete with a key. Decoupled from transport
+# via the AccountReader trait (LiteSVM in tests, RPC in production).
+
+[lib]
+name = "torna_sdk"
+path = "src/lib.rs"
+
+[dependencies]
+solana-sdk = "3.0"

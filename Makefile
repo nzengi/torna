@@ -40,6 +40,7 @@ integration: sbf probe
 	cd integration && ./target/debug/smoke
 	cd integration && ./target/debug/inttest
 	cd integration && ./target/debug/cpitest
+	cd integration && ./target/debug/sdktest
 
 # exhaustive on-chain differential vs an oracle (validates the SBF wrapper; ~70s)
 diff: sbf

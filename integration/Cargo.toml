@@ -18,6 +18,7 @@ path = "src/inttest.rs"
 [dependencies]
 litesvm = "0.10"
 solana-sdk = "3.0"
+torna-sdk = { path = "../sdk" }
 
 [[bin]]
 name = "difftest"
@@ -34,3 +35,7 @@ path = "src/cu.rs"
 [[bin]]
 name = "cpitest"
 path = "src/cpitest.rs"
+
+[[bin]]
+name = "sdktest"
+path = "src/sdktest.rs"
