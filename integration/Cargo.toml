@@ -39,3 +39,7 @@ path = "src/cpitest.rs"
 [[bin]]
 name = "sdktest"
 path = "src/sdktest.rs"
+
+[[bin]]
+name = "obtest"
+path = "src/obtest.rs"

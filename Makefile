@@ -18,7 +18,7 @@ BUILD    = build
 
 SBF_SDK := $(HOME)/.local/share/solana/install/active_release/bin/platform-tools-sdk/sbf
 
-.PHONY: all test test-asan sbf probe cpi-probe integration diff fuzz cu clean
+.PHONY: all test test-asan sbf probe cpi-probe orderbook integration diff fuzz cu clean
 
 all: test sbf integration diff fuzz cu
 
@@ -38,13 +38,18 @@ probe:
 cpi-probe:
 	cd cpi-probe && cargo build-sbf --offline
 
+# reference orderbook program (uses torna-cpi) -> sbf
+orderbook:
+	cd orderbook && cargo build-sbf --offline
+
 # on-chain integration tests in LiteSVM (needs sbf/out/torna.so built first)
-integration: sbf probe cpi-probe
+integration: sbf probe cpi-probe orderbook
 	cd integration && cargo build --offline
 	cd integration && ./target/debug/smoke
 	cd integration && ./target/debug/inttest
 	cd integration && ./target/debug/cpitest
 	cd integration && ./target/debug/sdktest
+	cd integration && ./target/debug/obtest
 
 # exhaustive on-chain differential vs an oracle (validates the SBF wrapper; ~70s)
 diff: sbf

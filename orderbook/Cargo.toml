@@ -1,0 +1,16 @@
+[package]
+name = "torna-orderbook"
+version = "0.1.0"
+edition = "2021"
+
+# Reference parallel CLOB on Torna (MOAT step 6, the grant headline). A market = two
+# Torna trees (ask + bid) whose authority is a market PDA. The program owns matching
+# + order ownership; Torna owns the sorted, parallel book. v1: PlaceOrder + CancelOrder
+# (the maker flow that showcases parallelism). Match + token settlement: next increment.
+
+[lib]
+crate-type = ["cdylib", "lib"]
+
+[dependencies]
+solana-program = "3.0"
+torna-cpi = { path = "../cpi" }

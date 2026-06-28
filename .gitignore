@@ -8,3 +8,4 @@ bench/PROGRAM_ID.txt
 sdk/target/
 cpi/target/
 cpi-probe/target/
+orderbook/target/
