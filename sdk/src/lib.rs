@@ -46,7 +46,6 @@ const H_EPOCH: usize = 82;
 const H_AUTHORITY: usize = 90;
 // node field offsets
 const N_KEY_COUNT: usize = 2;
-const N_NODE_IDX: usize = 12;
 const N_NEXT_LEAF: usize = 20;
 // allocator
 const A_HIGH_WATER: usize = 8;

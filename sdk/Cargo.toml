@@ -2,11 +2,17 @@
 name = "torna-sdk"
 version = "0.1.0"
 edition = "2021"
+description = "Typed client SDK (the PathPlanner) for Torna, the parallel, ordered, on-chain B+ tree index on Solana. Resolves the exact account set off-chain so node indices, PDA bumps, paths, and split spares never leak to the integrator."
+license = "MIT"
+repository = "https://github.com/nzengi/torna"
+homepage = "https://torna.vercel.app"
+readme = "README.md"
+keywords = ["solana", "b-tree", "index", "orderbook", "sdk"]
+categories = ["cryptography::cryptocurrencies", "data-structures"]
 
-# Typed client SDK for Torna. The PathPlanner resolves the on-chain account set
-# (header / path / spares) off-chain so integrators never touch node_idx, bumps,
-# or paths -- they call insert/update/delete with a key. Decoupled from transport
-# via the AccountReader trait (LiteSVM in tests, RPC in production).
+# The PathPlanner resolves the on-chain account set (header / path / spares) off-chain so integrators
+# never touch node_idx, bumps, or paths; they call insert/update/delete with a key. Transport is
+# decoupled via the AccountReader trait (LiteSVM in tests, RPC in production).
 
 [lib]
 name = "torna_sdk"
