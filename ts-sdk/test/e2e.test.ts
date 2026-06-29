@@ -105,3 +105,115 @@ test("TS SDK drives the real engine end-to-end (bankrun)", async () => {
   // a missing key reads null
   assert.equal(await tree.get(reader, k32(999)), null, "absent key -> null");
 });
+
+// The first e2e never exceeds height 1 (5 keys in a fanout-8 leaf), so the planner's
+// MOST complex code -- multi-level descent in path(), the cold SPLIT account set, deleteIx
+// sibling resolution, findIx, scanAccounts, coldPlan -- was entirely unexercised. This
+// drives a genuinely multi-level tree (forced splits) through the real engine so a
+// regression in any of those paths fails here instead of silently shipping. (round-1 gaps)
+test("TS planner drives a MULTI-LEVEL tree (split / find / delete-rebalance)", async () => {
+  const programId = new PublicKey(new Uint8Array(32).fill(7));
+  const ctx = await start([{ name: "torna", programId }], []);
+  const client = ctx.banksClient;
+  const payer = ctx.payer;
+  const rent = await client.getRent();
+
+  const reader: AccountReader = {
+    async accountData(key: PublicKey) {
+      const a = await client.getAccount(key);
+      return a ? Uint8Array.from(a.data) : null;
+    },
+  };
+  // tryProcessTransaction returns the error (result string) instead of throwing
+  const sendTry = async (ix: any, signers: Keypair[] = [payer]) => {
+    const tx = new Transaction();
+    tx.recentBlockhash = ctx.lastBlockhash;
+    tx.feePayer = payer.publicKey;
+    tx.add(ix);
+    tx.sign(...signers);
+    return client.tryProcessTransaction(tx);
+  };
+  const ok = (res: any, msg: string) => assert.equal(res.result, null, `${msg}: ${res.result}`);
+
+  const tree = new Tree(programId, payer.publicKey, 2);
+  ok(await sendTry(tree.initTreeIx(payer.publicKey, VS, F, rent.minimumBalance(146n), rent.minimumBalance(32n))), "init");
+  const rentNode = rent.minimumBalance(BigInt((await tree.header(reader))!.nodeSize));
+
+  // Place keys via the DOCUMENTED hot-then-cold flow: try InsertFast; on ERR_NEED_SPLIT_SLOT
+  // (102 = 0x66, leaf full) fall back to the cold split path. The empty-tree first insert
+  // fails InsertFast with a different code and also falls through to cold.
+  const N = 25;
+  const nums = Array.from({ length: N }, (_, i) => i + 1);
+  let splits = 0;
+  for (const n of nums) {
+    const fastRes = await sendTry((await tree.insertFastIx(reader, payer.publicKey, k32(n), val(n * 10)))!);
+    if (fastRes.result === null) continue; // hot insert landed
+    if (fastRes.result.includes("0x66")) splits++; // genuine NEED_SPLIT_SLOT
+    ok(await sendTry((await tree.insertIx(reader, payer.publicKey, k32(n), val(n * 10), rentNode))!), `cold insert ${n}`);
+  }
+  assert.ok(splits >= 2, `cold split path exercised (${splits} splits)`);
+
+  // multi-level: height must have grown past 1, so path()'s descent loop ran for real
+  const h = (await tree.header(reader))!;
+  assert.ok(h.height >= 2, `tree is multi-level (height=${h.height})`);
+  assert.equal(h.authority.toBase58(), payer.publicKey.toBase58(), "parseHeader.authority offset");
+
+  // every key reads back via the multi-level off-chain planner, in sorted order
+  for (const n of nums) assert.equal(hex(await tree.get(reader, k32(n))), hex(val(n * 10)), `get ${n} (multi-level)`);
+  const scanNums = (await tree.scan(reader, 1000)).map((e) => new DataView(e.key.buffer, e.key.byteOffset).getUint32(28, false));
+  assert.deepEqual(scanNums, nums, "scan spans multiple leaves, fully ordered");
+  // scan's max-truncation early-stop, across the multi-leaf chain (not just the first leaf)
+  const head3 = (await tree.scan(reader, 3)).map((e) => new DataView(e.key.buffer, e.key.byteOffset).getUint32(28, false));
+  assert.deepEqual(head3, [1, 2, 3], "scan honors max across leaves");
+
+  // findIx: the ON-CHAIN Find instruction (never sent before). return_data = [found, value..]
+  const present = await sendTry((await tree.findIx(reader, k32(12)))!);
+  ok(present, "findIx present");
+  assert.equal(present.meta!.returnData!.data[0], 1, "find: found flag");
+  assert.equal(hex(present.meta!.returnData!.data.slice(1)), hex(val(120)), "find: value");
+  const absent = await sendTry((await tree.findIx(reader, k32(99)))!);
+  assert.equal(absent.meta!.returnData!.data[0], 0, "find: absent flag");
+
+  // scanAccounts must equal header + the actual leftmost->next_leaf chain of leaf PDAs
+  const accs = (await tree.scanAccounts(reader, 1000)).map((p) => p.toBase58());
+  const want = [tree.headerPda()[0].toBase58()];
+  {
+    let idx = h.leftmost;
+    while (idx !== 0n) {
+      want.push(tree.nodePda(idx)[0].toBase58());
+      const d = (await reader.accountData(tree.nodePda(idx)[0]))!;
+      idx = new DataView(d.buffer, d.byteOffset).getBigUint64(20, true); // N_NEXT_LEAF
+    }
+  }
+  assert.deepEqual(accs, want, "scanAccounts = header + full leaf chain");
+
+  // coldPlan must match the path + spares insertIx actually embeds (the ERR_NEED_SPLIT_SLOT
+  // fallback resolver and the builder must agree, or a cold place references wrong accounts)
+  const plan = (await tree.coldPlan(reader, k32(13)))!;
+  assert.equal(plan.spares.length, h.height + 2, "coldPlan spares = height+2");
+  const ci = (await tree.insertIx(reader, payer.publicKey, k32(13), val(130), rentNode))!;
+  const planPath = plan.path.map((n) => tree.nodePda(n)[0].toBase58());
+  const planSpares = plan.spares.map(([pk]) => pk.toBase58());
+  const embedded = ci.keys.slice(4).map((k) => k.pubkey.toBase58()); // after header,payer,alloc,system
+  assert.deepEqual(embedded, [...planPath, ...planSpares], "coldPlan path+spares == insertIx account set");
+
+  // deleteIx (cold rebalance, primary-only). Exercise BOTH sibling branches of the planner's
+  // sibling resolution -- a wrong side byte / sibling index makes the engine reject the tx or
+  // corrupt order, caught by `ok(...)` + the post-delete scan.
+  // (1) HIGH end first: the rightmost leaf underflows -> borrow/merge with its LEFT sibling
+  //     (deleteIx sides=2 branch), while the tree is still multi-level.
+  for (let n = 25; n >= 19; n--) {
+    ok(await sendTry((await tree.deleteIx(reader, payer.publicKey, k32(n)))!), `deleteIx high ${n}`);
+    assert.equal(await tree.get(reader, k32(n)), null, `deleted ${n} gone`);
+  }
+  assert.ok((await tree.header(reader))!.height >= 2, "still multi-level after the left-sibling pass");
+  // (2) LOW end: the leftmost leaf underflows -> borrow/merge with its RIGHT sibling (sides=1),
+  //     cascading until the root collapses back toward height 1.
+  for (let n = 1; n <= 12; n++) {
+    ok(await sendTry((await tree.deleteIx(reader, payer.publicKey, k32(n)))!), `deleteIx low ${n}`);
+    assert.equal(await tree.get(reader, k32(n)), null, `deleted ${n} gone`);
+  }
+  const remaining = (await tree.scan(reader, 1000)).map((e) => new DataView(e.key.buffer, e.key.byteOffset).getUint32(28, false));
+  assert.deepEqual(remaining, nums.filter((n) => n >= 13 && n <= 18), "scan correct after both-sided rebalance");
+  assert.ok((await tree.header(reader))!.height < h.height, "merges shrank the tree height");
+});

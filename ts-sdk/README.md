@@ -5,8 +5,13 @@ delete / find with a 32-byte key; the planner reads the tree off-chain and produ
 ready `TransactionInstruction` with the exact account set. `node_idx`, bumps, paths, and
 spares never leak out.
 
-This is a 1:1 port of the Rust `torna-sdk`, asserted **byte-for-byte** against it (golden
-vectors) and **end-to-end** against the real engine `torna.so` (bankrun). Targets
+This is a 1:1 port of the Rust `torna-sdk`. The pure surface — `orderKey`, the PDA
+derivations, and `initTreeIx` — is asserted **byte-for-byte** against the Rust SDK (golden
+vectors). The full builder + planner surface (hot insert/update/delete, the cold split path,
+multi-level descent, `findIx`, `deleteIx` rebalance, `scan`/`scanAccounts`/`coldPlan`) is
+verified **end-to-end against the real engine** `torna.so` over a genuinely multi-level tree
+(bankrun). Caller-supplied values are range/length-checked (Rust's `u64`/`u32`/`[u8;32]`
+types do this for free; the TS port checks at runtime and throws). Targets
 `@solana/web3.js` v1.
 
 ## Install
@@ -14,6 +19,10 @@ vectors) and **end-to-end** against the real engine `torna.so` (bankrun). Target
 ```
 npm install @torna/sdk @solana/web3.js
 ```
+
+Requirements: this is an **ESM-only** package (Node ≥18, or any bundler — Vite/webpack/esbuild;
+`require()` from CommonJS is not supported). Like `@solana/web3.js` v1 it relies on the Node
+`Buffer` global, so in a browser provide a `Buffer` polyfill.
 
 ## Use
 
@@ -52,6 +61,11 @@ const top = await tree.best(reader);              // top of book
 const page = await tree.scan(reader, 16);          // first 16 in sorted order
 const v = await tree.get(reader, key);             // value at a key, or null
 ```
+
+`best`/`scan`/`get` are **point-in-time off-chain snapshots** and may be stale by the time a
+transaction lands — the on-chain matcher re-reads each order's live size at settlement. Never
+treat a read size as final; size a `Match` defensively and rely on the taker's `limit` price
+(which this SDK does not build) as the real protection against a worse-than-expected fill.
 
 ### Staleness
 

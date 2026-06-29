@@ -68,20 +68,38 @@ function rdU32(d: Uint8Array, o: number): number {
 function rdU64(d: Uint8Array, o: number): bigint {
   return dv(d).getBigUint64(o, true);
 }
+// Rust's u16/u32/u64 types make an out-of-range or non-integer field unrepresentable;
+// the TS port has no such guard and DataView.setUintXX/setBigUint64 SILENTLY WRAP
+// (e.g. treeId 2^32 -> seed bytes of tree 0 -> instructions target the wrong tree).
+// So every narrowing encoder validates its input and throws. (round-1 footgun #2/#3/#5)
+function assertUint(v: number, bits: number, name: string): void {
+  if (!Number.isInteger(v)) throw new TypeError(`${name} must be an integer, got ${v}`);
+  if (v < 0 || v > 2 ** bits - 1) throw new RangeError(`${name} out of u${bits} range: ${v}`);
+}
 function u16le(v: number): Uint8Array {
+  assertUint(v, 16, "u16");
   const b = new Uint8Array(2);
   dv(b).setUint16(0, v, true);
   return b;
 }
 function u32le(v: number): Uint8Array {
+  assertUint(v, 32, "u32");
   const b = new Uint8Array(4);
   dv(b).setUint32(0, v, true);
   return b;
 }
 function u64le(v: bigint): Uint8Array {
+  if (typeof v !== "bigint") throw new TypeError(`u64 must be a bigint, got ${typeof v}`);
+  if (v < 0n || v > (1n << 64n) - 1n) throw new RangeError(`u64 out of range: ${v}`);
   const b = new Uint8Array(8);
   dv(b).setBigUint64(0, v, true);
   return b;
+}
+// The engine's KEY_SIZE is fixed at 32 (Rust takes `&[u8; 32]`). A wrong-length key here
+// would mis-route the descent (cmp compares only the shared prefix) AND shift the trailing
+// length byte in the instruction data -- a wrong-but-valid tx. Validate at the choke point.
+function assertKey(key: Uint8Array): void {
+  if (key.length !== KEY_SIZE) throw new RangeError(`key must be ${KEY_SIZE} bytes, got ${key.length}`);
 }
 function concat(parts: Uint8Array[]): Buffer {
   let n = 0;
@@ -147,7 +165,9 @@ export class Tree {
     readonly program: PublicKey,
     readonly creator: PublicKey,
     readonly treeId: number,
-  ) {}
+  ) {
+    assertUint(treeId, 32, "treeId"); // u32 in Rust; reject silent truncation in the PDA seeds
+  }
 
   headerPda(): [PublicKey, number] {
     return PublicKey.findProgramAddressSync(
@@ -180,6 +200,7 @@ export class Tree {
   /** Descent path root..leaf (node_idx list) for `key`. Empty if the tree is empty.
    *  Mirrors the engine's descent: lower_bound, then "key == separator -> go right". */
   async path(r: AccountReader, key: Uint8Array): Promise<bigint[] | null> {
+    assertKey(key); // single choke point: every key-taking builder/read resolves a path first
     const h = await this.header(r);
     if (!h) return null;
     if (h.height === 0) return [];
@@ -341,19 +362,26 @@ export class Tree {
       if (!pd) return null;
       const pcnt = rdU16(pd, N_KEY_COUNT);
       const kid = (i: number) => rdU64(pd, ko + i * 8);
-      let our = 0;
+      let our = -1;
       for (let i = 0; i <= pcnt; i++) {
         if (kid(i) === nodeIdx) {
           our = i;
           break;
         }
       }
+      // Child not under this parent (stale path), or a degenerate 0-separator parent: bail
+      // with null so the caller re-resolves, rather than read a garbage offset (kid(-1) =>
+      // an out-of-place but in-bounds slice) and emit a wrong sibling account. Unreachable
+      // with valid, consistent on-chain state (then our is found and pcnt >= 1).
+      if (our < 0) return null;
       if (our < pcnt) {
         sides[level] = 1;
-        sibIdxs.push(kid(our + 1)); // right sibling
-      } else {
+        sibIdxs.push(kid(our + 1)); // not the last child -> right sibling
+      } else if (our > 0) {
         sides[level] = 2;
-        sibIdxs.push(kid(our - 1)); // left sibling
+        sibIdxs.push(kid(our - 1)); // last child (pcnt >= 1) -> left sibling
+      } else {
+        return null; // last child but parent has no separators -> no sibling exists
       }
     }
     const data = concat([Uint8Array.of(IX_DELETE), key, Uint8Array.of(height), sides]);
@@ -476,8 +504,12 @@ export class Tree {
     return null;
   }
 
-  /** The header + leaf account pubkeys a forward scan of up to `maxEntries` would
-   *  traverse. A K-order match tx references these, so they go in an Address Lookup Table. */
+  /** The header + leaf account pubkeys a forward scan of up to `maxEntries` would traverse,
+   *  for an Address Lookup Table. NOTE: this returns LEAVES only. A K-order match on a tree
+   *  of height > 1 also needs each swept leaf's full root..leaf PATH (the matcher's phase-2
+   *  update/delete walks `height` accounts per leaf); supply those paths too, or the match tx
+   *  is under-specified and fails (ERR_BAD_PATH) -- it never settles wrong. At height 1 the
+   *  leaf IS the path, so this set is sufficient. */
   async scanAccounts(r: AccountReader, maxEntries: number): Promise<PublicKey[]> {
     const h = await this.header(r);
     if (!h || h.height === 0) return [];
