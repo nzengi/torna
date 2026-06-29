@@ -10,7 +10,7 @@ import { Connection, Keypair, PublicKey, SystemProgram, Transaction, sendAndConf
 import { setAuthority, AuthorityType } from "@solana/spl-token";
 
 const M = JSON.parse(readFileSync(join(import.meta.dirname, "../src/lib/market.json"), "utf8"));
-const conn = new Connection(M.rpcUrl, "confirmed");
+const conn = new Connection(process.env.RPC ?? M.rpcUrl, "confirmed");
 const id = Keypair.fromSecretKey(Uint8Array.from(JSON.parse(readFileSync(join(homedir(), ".config/solana/id.json"), "utf8"))));
 const faucetPath = join(import.meta.dirname, "../deploy/faucet-keypair.json");
 

@@ -31,8 +31,13 @@ export function walletActor(
     publicKey,
     send: async (tx) => {
       const conn = connection();
+      // blockhash-based confirmation (not the deprecated sig-only overload): bounds confirmation by
+      // block height so it can't hang indefinitely or false-fail a landed tx.
+      const { blockhash, lastValidBlockHeight } = await conn.getLatestBlockhash("confirmed");
+      tx.recentBlockhash = blockhash;
+      tx.feePayer = publicKey;
       const sig = await sendTransaction(tx, conn);
-      await conn.confirmTransaction(sig, "confirmed");
+      await conn.confirmTransaction({ signature: sig, blockhash, lastValidBlockHeight }, "confirmed");
       return sig;
     },
   };
@@ -79,7 +84,7 @@ export async function take(actor: Actor, bookSide: Side, limit: bigint, size: bi
 }
 
 /** Request demo tokens from the faucet for a connected wallet. */
-export async function requestFaucet(pubkey: PublicKey): Promise<{ sig: string }> {
+export async function requestFaucet(pubkey: PublicKey): Promise<{ sig?: string; alreadyFunded?: boolean }> {
   const res = await fetch("/api/faucet", {
     method: "POST",
     headers: { "content-type": "application/json" },

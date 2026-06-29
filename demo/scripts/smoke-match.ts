@@ -10,7 +10,7 @@ import { Tree, keys, type AccountReader } from "torna-sdk";
 import { ASK, matchIx } from "../src/lib/orderbook";
 
 const M = JSON.parse(readFileSync(join(import.meta.dirname, "../src/lib/market.json"), "utf8"));
-const conn = new Connection(M.rpcUrl, "confirmed");
+const conn = new Connection(process.env.RPC ?? M.rpcUrl, "confirmed");
 const reader: AccountReader = { async accountData(k: PublicKey) { const a = await conn.getAccountInfo(k, "confirmed"); return a ? Uint8Array.from(a.data) : null; } };
 const torna = new PublicKey(M.tornaProgramId);
 const orderbook = new PublicKey(M.orderbookProgramId);

@@ -21,13 +21,17 @@ export function Terminal() {
   const [mode, setMode] = useState<"wallet" | "demo">("demo");
   const [idIdx, setIdIdx] = useState(0);
   const [msg, setMsg] = useState<{ text: string; sig?: string } | null>(null);
+  const [cancelling, setCancelling] = useState<string | null>(null);
+  const [faucetBusy, setFaucetBusy] = useState(false);
 
   const useWalletAct = mode === "wallet" && connected;
-  const actor: Actor | null = useWalletAct
-    ? walletActor(wallet.publicKey!, wallet.sendTransaction)
-    : mode === "demo"
-      ? keypairActor(demoKeypair(idIdx))
-      : null;
+  let actor: Actor | null = null;
+  try {
+    if (useWalletAct) actor = walletActor(wallet.publicKey!, wallet.sendTransaction);
+    else if (mode === "demo" && MARKET.demos[idIdx]?.secret) actor = keypairActor(demoKeypair(idIdx));
+  } catch {
+    actor = null; // malformed demo identity in market.json -> no actor, page still renders
+  }
   const me = actor?.publicKey.toBase58();
 
   const mine = useMemo(() => {
@@ -38,7 +42,8 @@ export function Terminal() {
   }, [book.asks, book.bids, me]);
 
   const doCancel = async (side: Side, keyHex: string) => {
-    if (!actor) return;
+    if (!actor || cancelling) return;
+    setCancelling(keyHex);
     setMsg({ text: "cancelling…" });
     try {
       const sig = await cancel(actor, side, keyHex);
@@ -46,17 +51,22 @@ export function Terminal() {
       book.refresh();
     } catch (e) {
       setMsg({ text: e instanceof Error ? e.message.slice(0, 120) : String(e) });
+    } finally {
+      setCancelling(null);
     }
   };
 
   const doFaucet = async () => {
-    if (!wallet.publicKey) return;
+    if (!wallet.publicKey || faucetBusy) return;
+    setFaucetBusy(true);
     setMsg({ text: "requesting demo tokens…" });
     try {
-      const { sig } = await requestFaucet(wallet.publicKey);
-      setMsg({ text: "received 1000 base + 1,000,000 quote + 0.05 SOL", sig });
+      const r = await requestFaucet(wallet.publicKey);
+      setMsg(r.sig ? { text: "received demo tokens + SOL", sig: r.sig } : { text: "wallet already funded" });
     } catch (e) {
       setMsg({ text: e instanceof Error ? e.message.slice(0, 120) : String(e) });
+    } finally {
+      setFaucetBusy(false);
     }
   };
 
@@ -83,8 +93,8 @@ export function Terminal() {
                 <span className="nums flex items-center gap-1.5 text-sm text-fg">
                   <Wallet className="h-4 w-4 text-brand" aria-hidden /> {shorten(wallet.publicKey!.toBase58())}
                 </span>
-                <button onClick={doFaucet} className="inline-flex items-center gap-1.5 rounded-lg border border-brand/40 bg-brand/5 px-3 py-1.5 text-sm text-brand transition-colors duration-100 hover:bg-brand/10 active:translate-y-px">
-                  <Droplets className="h-4 w-4" aria-hidden /> Get demo tokens
+                <button onClick={doFaucet} disabled={faucetBusy} className="inline-flex items-center gap-1.5 rounded-lg border border-brand/40 bg-brand/5 px-3 py-1.5 text-sm text-brand transition-colors duration-100 hover:bg-brand/10 active:translate-y-px disabled:pointer-events-none disabled:opacity-50">
+                  <Droplets className="h-4 w-4" aria-hidden /> {faucetBusy ? "Requesting…" : "Get demo tokens"}
                 </button>
               </>
             ) : (
@@ -133,9 +143,10 @@ export function Terminal() {
               </span>
               <button
                 onClick={() => doCancel(o.side, o.keyHex)}
-                className="rounded border border-line px-3 py-1 text-xs text-muted transition-colors duration-100 hover:border-ask hover:text-ask active:translate-y-px"
+                disabled={cancelling !== null}
+                className="rounded border border-line px-3 py-1 text-xs text-muted transition-colors duration-100 hover:border-ask hover:text-ask active:translate-y-px disabled:pointer-events-none disabled:opacity-50"
               >
-                cancel
+                {cancelling === o.keyHex ? "…" : "cancel"}
               </button>
             </div>
           ))}

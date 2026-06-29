@@ -59,6 +59,13 @@ async function main() {
   const ask = new Tree(torna, payer.publicKey, ASK_TREE);
   const bid = new Tree(torna, payer.publicKey, BID_TREE);
 
+  // re-run guard: the tree PDAs are deterministic, so a second run would just waste rent then abort
+  // at init_tree. Bail early with a clear message (bump MARKET_ID/tree ids for a fresh market).
+  if (await reader.accountData(ask.headerPda()[0])) {
+    console.error(`market ${MARKET_ID} already initialized (ask header exists). Bump MARKET_ID/ASK_TREE/BID_TREE for a fresh market. Aborting.`);
+    process.exit(1);
+  }
+
   // 1) mints (decimals 0 for clean integer display)
   console.log("creating mints ...");
   const baseMint = await createMint(conn, payer, payer.publicKey, null, 0);
@@ -130,9 +137,11 @@ async function main() {
     console.log(`  placed ${side === ASK ? "ASK" : "BID"} ${size}@${price} by demo${mi}`);
   }
 
-  // 7) write frontend config
+  // 7) write frontend config. NOTE: market.json is committed/bundled, so it must NOT carry a secret
+  // RPC key — write the PUBLIC endpoint here and keep the dedicated key only in .env.local (gitignored,
+  // read via NEXT_PUBLIC_RPC_URL). Scripts read process.env.RPC for a dedicated endpoint.
   const market = {
-    cluster: "devnet", rpcUrl: RPC,
+    cluster: "devnet", rpcUrl: "https://api.devnet.solana.com",
     tornaProgramId: torna.toBase58(), orderbookProgramId: orderbook.toBase58(),
     marketId: MARKET_ID.toString(), bookBump: bump,
     creator: payer.publicKey.toBase58(), askTreeId: ASK_TREE, bidTreeId: BID_TREE,
