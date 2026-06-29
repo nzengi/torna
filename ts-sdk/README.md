@@ -1,4 +1,4 @@
-# @torna/sdk
+# torna-sdk
 
 TypeScript client SDK for [Torna](../) — the **PathPlanner**. You call insert / update /
 delete / find with a 32-byte key; the planner reads the tree off-chain and produces a
@@ -17,7 +17,7 @@ types do this for free; the TS port checks at runtime and throws). Targets
 ## Install
 
 ```
-npm install @torna/sdk @solana/web3.js
+npm install torna-sdk @solana/web3.js
 ```
 
 Requirements: this is an **ESM-only** package (Node ≥18, or any bundler — Vite/webpack/esbuild;
@@ -31,7 +31,7 @@ a cache, or bankrun):
 
 ```ts
 import { Connection, PublicKey, Keypair, Transaction } from "@solana/web3.js";
-import { Tree, keys, type AccountReader } from "@torna/sdk";
+import { Tree, keys, type AccountReader } from "torna-sdk";
 
 const connection = new Connection("https://api.devnet.solana.com");
 const reader: AccountReader = {
@@ -74,7 +74,7 @@ Between resolving a path and the tx landing, a concurrent writer may split/merge
 `Header.structureEpoch` to detect it cheaply.
 
 ```ts
-import { retry, done, stale, fatal } from "@torna/sdk";
+import { retry, done, stale, fatal } from "torna-sdk";
 const res = await retry(3, async () => {
   const ix = await tree.insertFastIx(reader, authority.publicKey, key, value);
   const err = await submit(ix!);            // your submit

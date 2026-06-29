@@ -1,19 +1,24 @@
 {
-  "name": "@torna/sdk",
+  "name": "torna-sdk",
   "version": "0.1.0",
-  "description": "Torna client SDK (TypeScript) -- the PathPlanner. Mirrors the Rust torna-sdk against the frozen ABI.",
+  "description": "Torna client SDK (TypeScript) -- the PathPlanner for the parallel, ordered, on-chain B+ tree index on Solana. Resolves the exact account set off-chain so node indices, PDA bumps, paths, and split spares never leak to the integrator.",
   "license": "MIT",
+  "author": "nzengi",
+  "homepage": "https://github.com/nzengi/torna#readme",
+  "repository": { "type": "git", "url": "git+https://github.com/nzengi/torna.git", "directory": "ts-sdk" },
+  "bugs": { "url": "https://github.com/nzengi/torna/issues" },
+  "keywords": ["solana", "b-tree", "b+tree", "orderbook", "clob", "sorted-index", "sealevel", "parallel", "torna", "web3"],
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "exports": {
-    ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" },
-    "./keys": { "types": "./dist/keys.d.ts", "import": "./dist/keys.js" },
+    ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js", "default": "./dist/index.js" },
+    "./keys": { "types": "./dist/keys.d.ts", "import": "./dist/keys.js", "default": "./dist/keys.js" },
     "./package.json": "./package.json"
   },
   "sideEffects": false,
   "engines": { "node": ">=18" },
-  "files": ["dist", "src"],
+  "files": ["dist", "src", "LICENSE", "README.md"],
   "scripts": {
     "build": "tsc",
     "test": "node --import tsx --test test/*.test.ts"
