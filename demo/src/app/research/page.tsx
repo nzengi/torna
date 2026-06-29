@@ -110,7 +110,7 @@ export default function ResearchPage() {
             <H id="abstract">Abstract</H>
             <P>
               Torna is a parallel, ordered, on-chain index primitive for Solana. It stores a sorted key to
-              value map as a high-fanout B+ tree with one node per account, so writes at different keys
+              value map as a high-fanout B+ tree with one node per account, so writes to different leaves
               carry disjoint write sets and the Sealevel scheduler commits them in the same slot. The
               central limit order book is the hardest instance of the general problem (sorted state with
               many concurrent writers), and the dominant Solana designs answer it by concentrating the
@@ -232,7 +232,7 @@ export default function ResearchPage() {
             <P>
               The high-fanout B+ tree with one node per account is near-optimal on all three. With the
               default fanout of 64 the tree is about three levels deep, so an operation touches roughly
-              three node accounts; each node is its own account, so disjoint-key writes never share a lock;
+              three node accounts; each node is its own account, so writes in different leaves never share a lock;
               and the fanout amortizes the per-account overhead across many entries. The reason the
               structure is a B+ tree and not a slab or a skip list is precisely this three-way fit.
             </P>
@@ -389,8 +389,8 @@ export default function ResearchPage() {
             </div>
             <P>
               Disjoint writes commit about 4.6x (peak slot) to 7.1x (median busy slot) more transactions
-              per slot than same-leaf writes, and about 4.1x to 7.6x more than same fee-payer. Nearly the
-              same total confirms either way; the difference is density. Workload A packs its 28,862
+              per slot than same-leaf writes, and about 4.1x to 7.6x more than same fee-payer. Disjoint (A) and
+              same-leaf (B) confirm nearly the same total; the difference is density. Workload A packs its 28,862
               confirmations into 7 slots, while same-leaf B smears 29,549 across 21 slots, which is exactly
               the parallelism. A single-node validator has a small fixed number of banking threads; more
               threads on a real cluster would raise the lane ceiling W, though cluster scheduling and

@@ -35,7 +35,7 @@ export function BTree() {
   );
   const leaves = [60, 215, 370, 525];
   return (
-    <svg viewBox="0 0 720 300" className="w-full" role="img" aria-label="B+ tree: one node per account, disjoint-key writes parallelize">
+    <svg viewBox="0 0 720 300" className="w-full" role="img" aria-label="B+ tree: one node per account, writes to different leaves parallelize">
       {/* header (read-only on the hot path) */}
       <Box x={290} y={10} w={140} h={42} label="Tree header" sub="read-only on hot path" />
       {/* internal node */}

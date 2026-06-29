@@ -20,8 +20,8 @@ export default function Home() {
           <p className="enter mx-auto mt-6 max-w-xl text-lg leading-relaxed text-muted" style={{ animationDelay: "140ms" }}>
             On Solana, keeping state sorted usually means one giant account that serializes every write,
             plus an off-chain indexer to read it back. <span className="font-medium text-fg">Torna</span> is
-            a B+ tree with one node per account, so writes at different keys commit in the same slot. No
-            slab, no indexer.
+            a B+ tree with one node per account, so writes that land in different leaves commit in the same
+            slot. No slab, no indexer.
           </p>
           <div className="enter mt-8 flex flex-wrap items-center justify-center gap-3" style={{ animationDelay: "210ms" }}>
             <Link href="/build" className="inline-flex items-center gap-2 rounded-lg bg-brand px-5 py-2.5 text-sm font-medium text-onbrand transition-colors duration-100 hover:bg-brand-hi active:translate-y-px">

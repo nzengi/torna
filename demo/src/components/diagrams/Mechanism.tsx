@@ -1,7 +1,7 @@
-// The moat in one figure: the same three makers, two data structures. Left, the usual on-chain book is
-// one big account, so every write hits the same account and they serialize across three slots. Right,
-// Torna puts each B+ tree node in its own account, so writes at different prices touch different
-// accounts and the scheduler commits all three in one slot.
+// The moat in one figure: three makers, two data structures. Left, the usual on-chain book keeps each
+// side in one slab account, so every write takes the same lock and serializes across three slots. Right,
+// Torna puts each B+ tree node in its own account, so writes that fall in different leaves touch
+// different accounts and the scheduler commits all three in one slot.
 const PAR = "var(--parallel)";
 const SER = "var(--serial)";
 const LINE = "var(--line)";

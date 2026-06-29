@@ -111,13 +111,13 @@ export function TornaDocs() {
         <P>
           Torna is a sorted key to value store on Solana where every B+ tree node lives in its own
           account. Sorting comes from the B+ tree; parallelism comes from one-node-per-account, so writes
-          at different keys carry disjoint write sets and the Sealevel scheduler runs them in the same
+          to different leaves carry disjoint write sets and the Sealevel scheduler runs them in the same
           slot; and the SDK resolves the exact accounts off-chain. It is a generic index primitive, not a
           matching engine. The engine is written in C for SBF. Build any sorted state with concurrent
           writers on it; the TornaDEX tab is one worked example.
         </P>
         <Note>
-          Torna parallelizes <span className="text-fg">maintenance</span> (writes across different keys),
+          Torna parallelizes <span className="text-fg">maintenance</span> (writes to different leaves),
           not a serial consumer like top-of-book matching. The numbers here are measured on a single-node
           validator banking stage; devnet is shared, so the controlled number is the honest one. In-house
           adversarial review is not an external audit, which is still pending.
@@ -166,7 +166,7 @@ export function TornaDocs() {
         <P>Every Solana program is bound by three limits. Torna&apos;s layout is chosen to win all three; a single-account slab loses all three.</P>
         <ul className="mt-4 space-y-2 text-[15px] text-muted">
           <li><strong className="text-fg">Per-tx account budget</strong> (the scarcest, ~35 legacy / ~256 with ALT). High fanout means height ~3, so an operation touches ~3 node accounts, not one huge slab.</li>
-          <li><strong className="text-fg">Account-lock parallelism (Sealevel)</strong>. One node per account means disjoint-key writes do not share a writable account, so the scheduler runs them in the same slot.</li>
+          <li><strong className="text-fg">Account-lock parallelism (Sealevel)</strong>. One node per account means writes to different leaves do not share a writable account, so the scheduler runs them in the same slot.</li>
           <li><strong className="text-fg">Rent</strong>. Node size is parameterized by value size; high fanout amortizes the per-account overhead.</li>
         </ul>
       </section>
@@ -222,7 +222,7 @@ InitTree   (0)    [ 0][tree_id u32][hdr_bump][alloc_bump][value_size u16][fanout
         <P>
           The hot-path account set is always: header (read-only), authority (read-only signer), then the
           path nodes with only the leaf writable. That exact shape, header read-only and a single leaf
-          writable, is what lets disjoint-key operations land in the same slot. value size (vs) is fixed
+          writable, is what lets writes to different leaves land in the same slot. value size (vs) is fixed
           per tree at init.
         </P>
       </section>

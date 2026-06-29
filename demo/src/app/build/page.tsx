@@ -160,7 +160,7 @@ let top = tree.best(&reader);`}</Code>}
             {/* WRITE */}
             <section>
               <H id="write">Write (hot path)</H>
-              <P>Header read-only, only the target leaf writable, no CPI. So disjoint-key writes from different fee-payers commit in the same slot.</P>
+              <P>Header read-only, only the target leaf writable, no CPI. So writes to different leaves from different fee-payers commit in the same slot.</P>
               <DualCode
                 ts={<Code lang="typescript">{`const insert = await tree.insertFastIx(reader, authority, key, value);     // add
 const update = await tree.updateFastIx(reader, authority, key, newValue);  // overwrite in place
@@ -258,7 +258,7 @@ function scoreKey(score: bigint, player: PublicKey): Uint8Array {
 // created once with value_size = 32 (the value is a 32-byte pubkey)
 const board = new Tree(program, creator, /* treeId */ 7);
 
-// submit a score (value = the player); the first insert bootstraps via board.insertIx
+// submit a score (value = the player); many players write in parallel
 const ix = await board.insertFastIx(reader, authority, scoreKey(score, player), player.toBytes());
 
 // read the top 10, off-chain, no transaction

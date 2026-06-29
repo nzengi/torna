@@ -1,5 +1,5 @@
 // The moat, shown not told: a price is a key in the B+ tree and every node is its own account, so
-// disjoint prices touch disjoint accounts and commit in one slot. The ratio is measured on a
+// writes in different leaves touch disjoint accounts and commit in one slot. The ratio is measured on a
 // single-node validator's real banking stage (torna/bench); it is BOOK MAINTENANCE, not matching.
 import { Mechanism } from "@/components/diagrams/Mechanism";
 
