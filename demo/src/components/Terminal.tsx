@@ -1,17 +1,23 @@
 "use client";
 
-// Act 1 client shell: owns the live book poll, the acting account (a connected WALLET or a pre-funded
-// DEMO identity), and wires the book, trade form, and cancellable "your orders" together.
-import { useMemo, useState } from "react";
+// Trade terminal: a market header (live best bid/ask/spread), the acting account (a connected WALLET
+// or a pre-funded DEMO identity) with its live balances + a faucet, the order book, the trade form,
+// and a cancellable open-orders list. All reads come off-chain via the SDK; nothing is mocked.
+import { useEffect, useMemo, useState } from "react";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { useWalletModal } from "@solana/wallet-adapter-react-ui";
 import { Droplets, Wallet } from "lucide-react";
+import { PublicKey } from "@solana/web3.js";
+import { getAssociatedTokenAddressSync } from "@solana/spl-token";
 import { ASK, BID, type Side } from "@/lib/orderbook";
 import { cancel, keypairActor, walletActor, requestFaucet, type Actor } from "@/lib/actions";
 import { useBook } from "@/lib/useBook";
-import { demoKeypair, explorerTx, MARKET, shorten } from "@/lib/market";
+import { connection, demoKeypair, explorerTx, MARKET, reader, shorten } from "@/lib/market";
 import { OrderBook } from "./OrderBook";
 import { Trade } from "./Trade";
+
+const amount = (d: Uint8Array | null) =>
+  d && d.length >= 72 ? new DataView(d.buffer, d.byteOffset, d.byteLength).getBigUint64(64, true) : 0n;
 
 export function Terminal() {
   const book = useBook();
@@ -23,6 +29,8 @@ export function Terminal() {
   const [msg, setMsg] = useState<{ text: string; sig?: string } | null>(null);
   const [cancelling, setCancelling] = useState<string | null>(null);
   const [faucetBusy, setFaucetBusy] = useState(false);
+  const [bal, setBal] = useState<{ base: bigint; quote: bigint; sol: number } | null>(null);
+  const [balKey, setBalKey] = useState(0);
 
   const useWalletAct = mode === "wallet" && connected;
   let actor: Actor | null = null;
@@ -34,6 +42,24 @@ export function Terminal() {
   }
   const me = actor?.publicKey.toBase58();
 
+  // live balances of the acting account (base, quote, SOL)
+  useEffect(() => {
+    if (!me) { setBal(null); return; }
+    let alive = true;
+    (async () => {
+      const c = connection();
+      const r = reader(c);
+      const pk = new PublicKey(me);
+      const baseAta = getAssociatedTokenAddressSync(new PublicKey(MARKET.baseMint), pk, true);
+      const quoteAta = getAssociatedTokenAddressSync(new PublicKey(MARKET.quoteMint), pk, true);
+      const [bd, qd, sol] = await Promise.all([r.accountData(baseAta), r.accountData(quoteAta), c.getBalance(pk)]);
+      if (alive) setBal({ base: amount(bd), quote: amount(qd), sol: sol / 1e9 });
+    })().catch(() => { if (alive) setBal(null); });
+    return () => { alive = false; };
+  }, [me, balKey]);
+
+  const refreshAll = () => { book.refresh(); setBalKey((k) => k + 1); };
+
   const mine = useMemo(() => {
     if (!me) return [];
     const a = book.asks.filter((o) => o.maker === me).map((o) => ({ ...o, side: ASK as Side }));
@@ -41,14 +67,19 @@ export function Terminal() {
     return [...a, ...b];
   }, [book.asks, book.bids, me]);
 
+  const bestAsk = book.asks[0]?.price;
+  const bestBid = book.bids[0]?.price;
+  const spread = bestAsk !== undefined && bestBid !== undefined ? bestAsk - bestBid : undefined;
+  const mid = bestAsk !== undefined && bestBid !== undefined ? (bestAsk + bestBid) / 2n : undefined;
+
   const doCancel = async (side: Side, keyHex: string) => {
     if (!actor || cancelling) return;
     setCancelling(keyHex);
-    setMsg({ text: "cancelling…" });
+    setMsg({ text: "cancelling order" });
     try {
       const sig = await cancel(actor, side, keyHex);
-      setMsg({ text: "cancelled", sig });
-      book.refresh();
+      setMsg({ text: "order cancelled", sig });
+      refreshAll();
     } catch (e) {
       setMsg({ text: e instanceof Error ? e.message.slice(0, 120) : String(e) });
     } finally {
@@ -59,10 +90,11 @@ export function Terminal() {
   const doFaucet = async () => {
     if (!wallet.publicKey || faucetBusy) return;
     setFaucetBusy(true);
-    setMsg({ text: "requesting demo tokens…" });
+    setMsg({ text: "requesting demo tokens" });
     try {
       const r = await requestFaucet(wallet.publicKey);
       setMsg(r.sig ? { text: "received demo tokens + SOL", sig: r.sig } : { text: "wallet already funded" });
+      refreshAll();
     } catch (e) {
       setMsg({ text: e instanceof Error ? e.message.slice(0, 120) : String(e) });
     } finally {
@@ -72,6 +104,19 @@ export function Terminal() {
 
   return (
     <div className="space-y-4">
+      {/* market header */}
+      <div className="flex flex-wrap items-center gap-x-8 gap-y-3 rounded-xl border border-line bg-panel px-5 py-3.5">
+        <div className="flex items-baseline gap-2">
+          <span className="text-base font-semibold tracking-tight">BASE / QUOTE</span>
+          <span className="rounded bg-panel-hi px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-faint">devnet</span>
+        </div>
+        <Quote label="Best bid" value={bestBid} cls="text-bid" />
+        <Quote label="Mid" value={mid} cls="text-fg" />
+        <Quote label="Best ask" value={bestAsk} cls="text-ask" />
+        <Quote label="Spread" value={spread} cls="text-muted" />
+        <a href="/explorer" className="ml-auto text-xs text-brand hover:text-brand-hi">market accounts in Explorer</a>
+      </div>
+
       {/* account bar */}
       <div className="rounded-xl border border-line bg-panel p-4">
         <div className="flex flex-wrap items-center gap-3">
@@ -94,7 +139,7 @@ export function Terminal() {
                   <Wallet className="h-4 w-4 text-brand" aria-hidden /> {shorten(wallet.publicKey!.toBase58())}
                 </span>
                 <button onClick={doFaucet} disabled={faucetBusy} className="inline-flex items-center gap-1.5 rounded-lg border border-brand/40 bg-brand/5 px-3 py-1.5 text-sm text-brand transition-colors duration-100 hover:bg-brand/10 active:translate-y-px disabled:pointer-events-none disabled:opacity-50">
-                  <Droplets className="h-4 w-4" aria-hidden /> {faucetBusy ? "Requesting…" : "Get demo tokens"}
+                  <Droplets className="h-4 w-4" aria-hidden /> {faucetBusy ? "Requesting" : "Get demo tokens"}
                 </button>
               </>
             ) : (
@@ -115,26 +160,35 @@ export function Terminal() {
               ))}
             </div>
           )}
+
+          {/* live balances of the acting account */}
+          {bal && (
+            <div className="nums ml-auto flex items-center gap-4 text-sm">
+              <Bal label="base" value={bal.base.toString()} />
+              <Bal label="quote" value={bal.quote.toString()} />
+              <Bal label="SOL" value={bal.sol.toFixed(3)} />
+            </div>
+          )}
         </div>
-        {mode === "wallet" && (
+        {mode === "wallet" && !connected && (
           <p className="mt-2 text-xs text-faint">
-            Connect Phantom/Solflare on devnet, grab demo tokens from the faucet, then trade with your own wallet.
+            Connect Phantom or Solflare on devnet, grab demo tokens from the faucet, then trade with your own wallet.
           </p>
         )}
         {msg && (
           <p className="mt-2 text-xs text-muted">
             {msg.text}
-            {msg.sig && <> · <a className="text-brand underline hover:text-brand-hi" href={explorerTx(msg.sig)} target="_blank" rel="noreferrer">tx ↗</a></>}
+            {msg.sig && <> · <a className="text-brand underline hover:text-brand-hi" href={explorerTx(msg.sig)} target="_blank" rel="noreferrer">view tx</a></>}
           </p>
         )}
       </div>
 
       <div className="grid gap-4 lg:grid-cols-3">
         <OrderBook asks={book.asks} bids={book.bids} loading={book.loading} error={book.error} mine={me} onRetry={book.refresh} />
-        <Trade actor={actor} onDone={book.refresh} />
+        <Trade actor={actor} onDone={refreshAll} />
         <div className="rounded-xl border border-line bg-panel">
           <div className="border-b border-line px-4 py-2.5 text-sm font-semibold">Your open orders</div>
-          {!actor && <div className="px-4 py-6 text-center text-sm text-faint">connect a wallet to trade</div>}
+          {!actor && <div className="px-4 py-6 text-center text-sm text-faint">pick an account to trade</div>}
           {actor && mine.length === 0 && <div className="px-4 py-6 text-center text-sm text-faint">no open orders</div>}
           {mine.map((o) => (
             <div key={o.keyHex} className="flex items-center justify-between border-b border-line/60 px-4 py-2 text-sm last:border-0">
@@ -146,12 +200,30 @@ export function Terminal() {
                 disabled={cancelling !== null}
                 className="rounded border border-line px-3 py-1 text-xs text-muted transition-colors duration-100 hover:border-ask hover:text-ask active:translate-y-px disabled:pointer-events-none disabled:opacity-50"
               >
-                {cancelling === o.keyHex ? "…" : "cancel"}
+                {cancelling === o.keyHex ? "..." : "cancel"}
               </button>
             </div>
           ))}
         </div>
       </div>
     </div>
+  );
+}
+
+function Quote({ label, value, cls }: { label: string; value: bigint | undefined; cls: string }) {
+  return (
+    <div>
+      <div className="text-[10px] uppercase tracking-wide text-faint">{label}</div>
+      <div className={`nums text-sm font-semibold ${cls}`}>{value !== undefined ? value.toString() : "-"}</div>
+    </div>
+  );
+}
+
+function Bal({ label, value }: { label: string; value: string }) {
+  return (
+    <span className="flex items-baseline gap-1">
+      <span className="text-fg">{value}</span>
+      <span className="text-[10px] uppercase tracking-wide text-faint">{label}</span>
+    </span>
   );
 }

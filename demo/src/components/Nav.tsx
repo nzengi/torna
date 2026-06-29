@@ -1,8 +1,15 @@
 "use client";
 
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import { usePathname } from "next/navigation";
-import { WalletMultiButton } from "@solana/wallet-adapter-react-ui";
+
+// wallet-adapter renders the button differently once it can read wallet state on the client, which
+// causes an SSR hydration mismatch. Render it client-only.
+const WalletMultiButton = dynamic(
+  async () => (await import("@solana/wallet-adapter-react-ui")).WalletMultiButton,
+  { ssr: false },
+);
 
 const LINKS = [
   { href: "/", label: "Home" },
