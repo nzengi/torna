@@ -48,7 +48,7 @@ export function BTree() {
       {L(360, 152, leaves[3] + 65, 210, true)}
       {/* leaves */}
       {leaves.map((x, i) => (
-        <Box key={i} x={x} y={210} w={130} h={44} label={`Leaf ${i + 1}`} sub={`prices ${["100–104", "105–109", "110–114", "115+"][i]}`} accent={i === 1 || i === 3} />
+        <Box key={i} x={x} y={210} w={130} h={44} label={`Leaf ${i + 1}`} sub={`prices ${["100-104", "105-109", "110-114", "115+"][i]}`} accent={i === 1 || i === 3} />
       ))}
       {/* maker badges */}
       <g>

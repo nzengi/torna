@@ -1,5 +1,6 @@
 import { BTree } from "@/components/diagrams/BTree";
 import { OrderKey } from "@/components/diagrams/OrderKey";
+import { Throughput } from "@/components/diagrams/Throughput";
 import { Compare } from "@/components/Compare";
 import { MARKET, explorerTx } from "@/lib/market";
 import tx from "@/lib/sample-tx.json";
@@ -316,12 +317,55 @@ export default function ResearchPage() {
           {/* EVAL */}
           <section>
             <H id="eval" n="7.">Evaluation</H>
+
+            <h3 className="mt-6 text-sm font-semibold uppercase tracking-wide text-brand">7.1 A throughput model</h3>
             <P>
-              <span className="font-medium text-fg">Parallelism.</span> On a real single-node validator
-              banking stage, with identical compute per transaction so the only variable is the writable
-              lock set, we measure committed transactions per roughly 400ms slot under saturation across
-              three workloads: disjoint leaves with disjoint payers (parallel), the same leaf (serial), and
-              the same fee-payer (serial).
+              Model the writable lock set of a maintenance transaction as the pair{" "}
+              <span className="nums text-fg">{"{leaf(k), payer(w)}"}</span>: the leaf the key k lands in and
+              the writer&apos;s fee-payer. Two transactions conflict, and cannot share a slot, exactly when
+              they share a leaf or share a payer. Each slot the banking stage commits a maximal set of
+              mutually non-conflicting transactions across its W lanes.
+            </P>
+            <P>
+              For N pending writes spread over L leaves and P payers, the committed count per slot is
+              approximately the expression below, where S is the slot time and t the per-transaction
+              execution time. The speedup over the fully serial case, one account and one lock, is the
+              factor in front.
+            </P>
+            <div className="my-4 space-y-2">
+              <div className="nums rounded-lg border border-line bg-panel px-4 py-3 text-center text-[15px] text-fg">committed / slot  ≈  min(W, L, P) · (S / t)</div>
+              <div className="nums rounded-lg border border-line bg-panel px-4 py-3 text-center text-[15px] text-fg">σ  =  min(W, L, P)</div>
+            </div>
+            <P>
+              Three regimes follow directly. Disjoint writes (different leaf, different payer) give{" "}
+              <span className="nums text-fg">σ = min(W, L, P)</span>, bounded by the hardware lane count. A
+              shared leaf collapses σ to 1, and so does a shared payer, the fee-payer trap. The B+ tree
+              supplies L: a book of n resting orders at fanout F occupies about n/F leaves, so L grows with
+              depth and the binding term is the lane count W until the book is shallow.
+            </P>
+            <P>
+              Matching is serial and cannot be parallelized. Let α be the matching fraction of traffic and
+              1 minus α the maintenance fraction. The aggregate speedup is then the Amdahl form below: it
+              approaches σ for a maker-heavy book and falls to 1 as traffic becomes taker-heavy.
+            </P>
+            <div className="my-4 nums rounded-lg border border-line bg-panel px-4 py-3 text-center text-[15px] text-fg">σ_agg  =  1 / ( α + (1 - α) / σ )</div>
+            <figure className="mt-6">
+              <div className="rounded-xl border border-line bg-panel p-5"><Throughput /></div>
+              <figcaption className="mt-2 text-xs leading-relaxed text-faint">
+                Figure 1. Aggregate speedup as a function of how maker-heavy the book is, for the measured
+                disjoint-write ceiling σ = 3.4 (p50) to 6 (peak). A liquid book sits to the right, where the
+                aggregate win is close to σ; a taker-heavy book sits to the left, where it approaches 1.
+              </figcaption>
+            </figure>
+
+            <h3 className="mt-10 text-sm font-semibold uppercase tracking-wide text-brand">7.2 Measured</h3>
+            <P>
+              <span className="font-medium text-fg">Parallelism.</span> The model predicts σ = min(W, L, P).
+              On a real single-node validator banking stage, with identical compute per transaction so the
+              only variable is the writable lock set, we measure committed transactions per roughly 400ms
+              slot under saturation across three workloads: disjoint leaves with disjoint payers (parallel),
+              the same leaf (serial), and the same fee-payer (serial). The lane count W of a single node is
+              small, so we expect a few-fold σ, with L and P large.
             </P>
             <div className="mt-4 overflow-hidden rounded-xl border border-line text-sm">
               <div className="grid grid-cols-[1.7fr_1fr_1fr_1fr] gap-3 bg-panel-hi px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-faint">
