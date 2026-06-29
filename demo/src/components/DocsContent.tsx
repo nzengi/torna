@@ -336,17 +336,21 @@ const reader: AccountReader = {
 
 const tree = new Tree(program, creator, /* treeId */ 1);
 
+// a 32-byte key and your value bytes (value_size for this tree)
+const key   = keys.orderKey(keys.Side.Ask, price, slot, maker, nonce);
+const value = orderValue;
+
 // read off-chain (no tx): top of book, a page, a single value
 const top  = await tree.best(reader);
 const page = await tree.scan(reader, 16);
 const val  = await tree.get(reader, key);
 
-// hot-path insert: header read-only, only the leaf writable -> parallel
-const key = keys.orderKey(keys.Side.Ask, price, slot, maker, nonce);
-const ix  = await tree.insertFastIx(reader, authority, key, value);
+// the cold path bootstraps an empty tree and handles leaf splits: use it for the first insert
+const first = await tree.insertIx(reader, payer, key, value, rentNode);
 
-// if the leaf is full the engine returns 102; fall back to the cold split path
-const cold = await tree.insertIx(reader, payer, key, value, rentNode);`}</Code>
+// once a leaf exists, the hot path writes it: header read-only, only the leaf writable -> parallel
+const ix = await tree.insertFastIx(reader, authority, key, value);
+// insertFastIx returns null and the engine returns 102 on a full leaf; fall back to insertIx`}</Code>
       </section>
 
       <section>

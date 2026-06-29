@@ -113,6 +113,7 @@ export function Terminal() {
         <div className="flex items-baseline gap-2">
           <span className="text-base font-semibold tracking-tight">BASE / QUOTE</span>
           <span className="rounded bg-panel-hi px-1.5 py-0.5 text-[11px] uppercase tracking-wide text-faint">devnet</span>
+          <span className="hidden text-[11px] text-faint sm:inline">raw integer prices and sizes</span>
         </div>
         <Quote label="Best bid" value={bestBid} cls="text-bid" />
         <Quote label="Mid" value={mid} cls="text-fg" />
@@ -165,7 +166,7 @@ export function Terminal() {
                   onClick={() => { setMode("demo"); setIdIdx(i); }}
                   className={`flex items-center gap-2.5 rounded-lg border px-3 py-2 transition-colors duration-100 active:translate-y-px ${mode === "demo" && i === idIdx ? "border-brand bg-brand/5" : "border-line hover:border-muted"}`}
                 >
-                  <span className="flex h-7 w-7 items-center justify-center rounded-full text-[11px] font-semibold text-white" style={{ background: TRADER_COLORS[i % 4] }}>{i + 1}</span>
+                  <span className="flex h-7 w-7 items-center justify-center rounded-full border text-[11px] font-semibold" style={{ background: `color-mix(in srgb, ${TRADER_COLORS[i % 4]} 22%, var(--panel))`, borderColor: TRADER_COLORS[i % 4], color: TRADER_COLORS[i % 4] }}>{i + 1}</span>
                   <span className="text-left leading-tight">
                     <span className="block text-sm font-medium text-fg">Trader {i + 1}</span>
                     <span className="nums block text-[11px] text-faint">{shorten(d.pubkey)}</span>

@@ -1,9 +1,10 @@
 // The 32-byte order key, big-endian, that makes byte-lexicographic order == price-time priority.
+// all four fields are 8 bytes, so the segments are drawn at equal width
 const SEGS = [
-  { bytes: "0-8", label: "price", note: "ask: price · bid: MAX-price", w: 30 },
-  { bytes: "8-16", label: "slot", note: "approx. time priority", w: 26 },
-  { bytes: "16-24", label: "maker[0..8]", note: "writer-unique", w: 26 },
-  { bytes: "24-32", label: "nonce", note: "no parallel collision", w: 18 },
+  { bytes: "0-8", label: "price", note: "ask: price · bid: MAX-price", w: 25 },
+  { bytes: "8-16", label: "slot", note: "approx. time priority", w: 25 },
+  { bytes: "16-24", label: "maker[0..8]", note: "writer-unique", w: 25 },
+  { bytes: "24-32", label: "nonce", note: "no parallel collision", w: 25 },
 ];
 
 export function OrderKey() {

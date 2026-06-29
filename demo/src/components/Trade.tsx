@@ -11,7 +11,9 @@ type Toast = { kind: "pending" | "ok" | "err"; msg: string; sig?: string } | nul
 
 export function Trade({ actor, book, onDone }: { actor: Actor | null; book: { asks: Order[]; bids: Order[] }; onDone: () => void }) {
   const [tab, setTab] = useState<"place" | "take">("place");
-  const [side, setSide] = useState<Side>(ASK);
+  // Track buy/sell INTENT, not book-side, so one color always means one direction. The book side is
+  // derived: selling rests/hits asks when placing, hits bids when taking, and vice versa.
+  const [dir, setDir] = useState<"buy" | "sell">("sell");
   const [price, setPrice] = useState("103");
   const [size, setSize] = useState("3");
   const [busy, setBusy] = useState(false);
@@ -19,6 +21,7 @@ export function Trade({ actor, book, onDone }: { actor: Actor | null; book: { as
 
   const bestAsk = book.asks[0]?.price;
   const bestBid = book.bids[0]?.price;
+  const side: Side = tab === "place" ? (dir === "sell" ? ASK : BID) : (dir === "buy" ? ASK : BID);
 
   // preview what the order will do before submitting: a maker place rests (or crosses);
   // a taker fills against the crossing side of the book.
@@ -72,13 +75,16 @@ export function Trade({ actor, book, onDone }: { actor: Actor | null; book: { as
 
       <div className="space-y-3 px-4 py-4">
         <div className="flex gap-2">
-          <button onClick={() => setSide(ASK)} className={`flex-1 rounded-lg border py-2 text-sm transition-colors duration-100 active:translate-y-px ${side === ASK ? "border-ask text-ask" : "border-line text-muted hover:border-muted"}`}>
-            {tab === "place" ? "Sell (ask)" : "Buy (hit asks)"}
+          <button onClick={() => setDir("sell")} className={`flex-1 rounded-lg border py-2 text-sm transition-colors duration-100 active:translate-y-px ${dir === "sell" ? "border-ask text-ask" : "border-line text-muted hover:border-muted"}`}>
+            Sell
           </button>
-          <button onClick={() => setSide(BID)} className={`flex-1 rounded-lg border py-2 text-sm transition-colors duration-100 active:translate-y-px ${side === BID ? "border-bid text-bid" : "border-line text-muted hover:border-muted"}`}>
-            {tab === "place" ? "Buy (bid)" : "Sell (hit bids)"}
+          <button onClick={() => setDir("buy")} className={`flex-1 rounded-lg border py-2 text-sm transition-colors duration-100 active:translate-y-px ${dir === "buy" ? "border-bid text-bid" : "border-line text-muted hover:border-muted"}`}>
+            Buy
           </button>
         </div>
+        <p className="text-[11px] leading-relaxed text-faint">
+          {tab === "place" ? "Place rests a limit order on the book (you are the maker)." : "Take fills now against the book (you are the taker)."}
+        </p>
 
         <label className="block">
           <div className="flex items-center justify-between">
@@ -113,13 +119,13 @@ export function Trade({ actor, book, onDone }: { actor: Actor | null; book: { as
         )}
 
         <button
-          disabled={busy || !price || !size || !actor}
+          disabled={busy || !price || !size || !actor || (tab === "place" && preview?.kind === "warn")}
           aria-busy={busy}
           onClick={tab === "place" ? doPlace : doTake}
           className="flex w-full items-center justify-center gap-2 rounded-lg bg-brand py-2.5 text-sm font-medium text-onbrand transition-colors duration-100 hover:bg-brand-hi active:translate-y-px disabled:pointer-events-none disabled:opacity-40"
         >
           {busy && <Loader2 className="h-4 w-4 animate-spin" aria-hidden />}
-          {busy ? "Submitting" : !actor ? "Pick an account" : tab === "place" ? "Place order" : "Take"}
+          {busy ? "Submitting" : !actor ? "Pick an account" : tab === "place" ? (preview?.kind === "warn" ? "Crosses, switch to Take" : "Place order") : "Take order"}
         </button>
 
         {toast && (

@@ -31,7 +31,7 @@ export default function Home() {
               Read the docs
             </Link>
           </div>
-          <p className="mt-5 text-xs text-faint">Live on devnet · SDKs on npm and crates.io · in-house adversarial-reviewed · external audit pending</p>
+          <p className="mt-5 text-xs text-faint">Live on devnet · SDKs on npm and crates.io · internally reviewed, external audit pending</p>
         </div>
       </section>
 
@@ -49,12 +49,12 @@ export default function Home() {
         </div>
         <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {[
-            { icon: BarChart3, t: "Order books", d: "Price-time priority, parallel maker quotes, real escrow." },
+            { icon: BarChart3, t: "Order books", d: "Price-time priority, parallel maker quotes (matching stays serial), real escrow." },
             { icon: ListOrdered, t: "Liquidation queues", d: "Sorted by health; keepers pop the worst, borrowers update in parallel." },
             { icon: Trophy, t: "Leaderboards", d: "Top-N with cheap reads and concurrent score updates." },
             { icon: Vote, t: "Governance", d: "Sorted stake or votes, queryable on-chain without an indexer." },
             { icon: Boxes, t: "Expiry queues", d: "Ordered by deadline; the soonest to expire is the leftmost leaf." },
-            { icon: Code2, t: "Your sorted index", d: "Generic key to value, value up to 128 bytes per tree." },
+            { icon: Code2, t: "Your sorted index", d: "Generic key to value, value up to 128 bytes per entry." },
           ].map((c) => (
             <div key={c.t} className="rounded-xl border border-line bg-panel p-5 transition-colors duration-150 hover:border-brand/40">
               <c.icon className="h-5 w-5 text-brand" aria-hidden />

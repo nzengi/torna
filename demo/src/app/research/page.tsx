@@ -44,7 +44,7 @@ function Note({ children }: { children: React.ReactNode }) {
 }
 
 const PRIOR: [string, string, string][] = [
-  ["Slab CLOB (Serum / OpenBook v1)", "As publicly described: the whole book is one large account (a slab / crit-bit tree) and a permissionless crank bot drains an event queue to match and settle.", "Every order operation contends on a single writable account, so placements serialize, and the event-queue plus crank model adds latency and a liveness dependency."],
+  ["Slab CLOB (Serum / OpenBook v1)", "As publicly described: the book lives in a few large per-market accounts (bid and ask slabs plus request and event queues), each a single write lock; a permissionless crank drains the event queue to settle and credit fills.", "Every order on a side contends on that side's one writable slab, so placements serialize, and the event-queue plus crank model adds latency and a liveness dependency."],
   ["Crankless CLOB (Phoenix-style)", "Removes the crank by matching atomically inside the taker's transaction, with no event queue.", "The market state is still concentrated in one account, so order operations on it take the same write lock and serialize."],
   ["Off-chain book + on-chain settle", "The order book lives on a relayer; only settlement is on-chain.", "Not actually on-chain: trust, liveness, and censorship move off-chain, and the book is not composable from other programs."],
   ["AMM (constant-product)", "Sidesteps the order book entirely with a pool curve.", "No limit orders and no price-time priority; capital inefficiency and impermanent loss; a different product, not an order book."],
@@ -113,8 +113,9 @@ export default function ResearchPage() {
               value map as a high-fanout B+ tree with one node per account, so writes at different keys
               carry disjoint write sets and the Sealevel scheduler commits them in the same slot. The
               central limit order book is the hardest instance of the general problem (sorted state with
-              many concurrent writers), and the dominant Solana designs answer it with a single large
-              account plus an off-chain crank, which serializes writes and adds a liveness dependency. We
+              many concurrent writers), and the dominant Solana designs answer it by concentrating the
+              book in a single large account (often, though not always, with an off-chain crank), which
+              serializes writes and, where a crank is used, adds a liveness dependency. We
               formalize the three scarce resources that bound any design, walk the design space we
               explored and rejected, present Torna, and evaluate it: a measured 3.4 to 6x throughput gain
               for disjoint versus contended writes on a real validator banking stage, single-key hot
@@ -202,7 +203,7 @@ export default function ResearchPage() {
               </li>
             </ol>
             <P>
-              A single-account slab loses (i) is fine but (ii) is zero (one lock) and (iii) hits the
+              For a single-account slab, (i) is fine, but (ii) is zero (one lock) and (iii) hits the
               account size ceiling. A textbook low-fanout B-tree spread across accounts wins (ii) and (iii)
               but loses (i), because its height makes one operation touch too many accounts. The design has
               to win all three at once.
@@ -279,7 +280,7 @@ export default function ResearchPage() {
               For the order-book instantiation, one 32-byte key encodes price-time priority directly, so
               the tree is the sorted book with no secondary index. The price occupies the high bytes
               big-endian so byte order matches numeric order; a writer-unique tail (maker and nonce)
-              breaks ties so two makers at the same price never collide or serialize on each other.
+              breaks ties so two makers at the same price are vanishingly unlikely to collide, and do not serialize on each other.
             </P>
             <div className="mt-5"><OrderKey /></div>
 
@@ -354,7 +355,7 @@ export default function ResearchPage() {
               <div className="rounded-xl border border-line bg-panel p-5"><Throughput /></div>
               <figcaption className="mt-2 text-xs leading-relaxed text-faint">
                 Figure 1. Aggregate speedup as a function of how maker-heavy the book is, for the measured
-                disjoint-write ceiling σ = 3.4 (p50) to 6 (peak). A liquid book sits to the right, where the
+                disjoint-write ceiling σ = 3.4 (peak slot) to 6 (median busy slot). A liquid book sits to the right, where the
                 aggregate win is close to σ; a taker-heavy book sits to the left, where it approaches 1.
               </figcaption>
             </figure>

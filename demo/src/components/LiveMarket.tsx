@@ -1,7 +1,7 @@
 "use client";
 
-// A live snapshot of the on-chain book, read from devnet via the SDK. Proves the demo is real, right
-// in the hero. Auto-refreshes through useBook.
+// A live snapshot of the on-chain book, read from devnet via the cached endpoint. Proves the demo is
+// real, right in the hero. The status never claims "live" over an empty or errored book.
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 import { useBook } from "@/lib/useBook";
@@ -10,23 +10,25 @@ export function LiveMarket() {
   const { asks, bids, loading, error } = useBook();
   const bestAsk = asks[0]?.price;
   const bestBid = bids[0]?.price;
-  const mid = bestAsk !== undefined && bestBid !== undefined ? (bestAsk + bestBid) / 2n : undefined;
   const spread = bestAsk !== undefined && bestBid !== undefined ? bestAsk - bestBid : undefined;
   const count = asks.length + bids.length;
-  const fmt = (v: bigint | undefined) => (v !== undefined ? v.toString() : "-");
+  const fmt = (v: bigint | undefined) => (v !== undefined ? v.toLocaleString() : "-");
+
+  const empty = !loading && !error && count === 0;
+  const dot = error ? "bg-ask" : empty ? "bg-serial" : "bg-bid";
+  const status = error ? "rpc unavailable" : loading ? "syncing" : empty ? "book is empty right now" : "live, real escrow";
 
   return (
     <div className="glass neon-glow rounded-2xl p-5">
       <div className="mb-4 flex items-center justify-between">
         <span className="text-sm font-semibold text-fg">TornaDEX, live on devnet</span>
         <span className="flex items-center gap-1.5 text-xs text-faint">
-          <span className={`h-1.5 w-1.5 rounded-full ${error ? "bg-ask" : "bg-bid"} ${loading ? "animate-pulse" : ""}`} aria-hidden />
-          {error ? "rpc error" : loading ? "syncing" : "real book, real escrow"}
+          <span className={`h-1.5 w-1.5 rounded-full ${dot} ${loading ? "animate-pulse" : ""}`} aria-hidden />
+          {status}
         </span>
       </div>
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-2 gap-3">
         <Cell label="Best bid" value={fmt(bestBid)} cls="text-bid" />
-        <Cell label="Mid" value={fmt(mid)} cls="text-fg" />
         <Cell label="Best ask" value={fmt(bestAsk)} cls="text-ask" />
       </div>
       <div className="mt-3 grid grid-cols-2 gap-3">

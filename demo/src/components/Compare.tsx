@@ -4,7 +4,7 @@ const ROWS: { dim: string; slab: string; torna: string }[] = [
   { dim: "On-chain state", slab: "One giant slab account", torna: "One small account per node" },
   { dim: "Concurrent writes", slab: "Serialized, every write locks the slab", torna: "Parallel, disjoint keys, disjoint accounts" },
   { dim: "Reading the book", slab: "Off-chain indexer you run + maintain", torna: "Walk the tree off-chain via the SDK" },
-  { dim: "Ordering", slab: "Manual / re-sort", torna: "Always sorted (B+ tree invariant)" },
+  { dim: "Ordering", slab: "Sorted, but one write lock", torna: "Always sorted (B+ tree invariant)" },
   { dim: "Account budget", slab: "Whole slab loaded per tx", torna: "~3 node accounts per op (height ~3)" },
   { dim: "What you write", slab: "Allocator + indexer + matching", torna: "index<K,V>, accounts resolved for you" },
 ];

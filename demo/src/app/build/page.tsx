@@ -107,12 +107,14 @@ const reader: AccountReader = {
 
 const tree = new Tree(program, creator, 1);
 
-// a 32-byte key + a value (here, an order-book key; any sorted key works)
+// a 32-byte key + your value bytes (maker is your account; value_size for this tree)
 const key = keys.orderKey(keys.Side.Ask, 100n, 0n, maker, 1n);
 const value = orderValue;
 
-// the planner resolves the exact accounts; you sign and send
+// the hot path needs an existing leaf, so the first insert into a fresh tree uses the
+// cold tree.insertIx (it bootstraps and splits); after that, the hot path applies:
 const ix = await tree.insertFastIx(reader, authority, key, value);
+if (!ix) throw new Error("empty or full leaf - use tree.insertIx (cold)");
 await sendAndConfirmTransaction(connection, new Transaction().add(ix), [signer]);
 
 // read it back: no transaction, no fee
@@ -132,12 +134,14 @@ impl AccountReader for Reader {
 let reader = Reader;
 let tree = Tree::new(program, creator, 1);
 
-// a 32-byte key + a value (here, an order-book key; any sorted key works)
+// a 32-byte key + your value bytes (maker is your account; value_size for this tree)
 let key = keys::order_key(keys::Side::Ask, 100, 0, &maker, 1);
 let value = order_value;
 
-// the planner resolves the exact accounts; you sign and send
-let ix = tree.insert_fast_ix(&reader, authority, &key, &value).unwrap();
+// the hot path needs an existing leaf; the first insert into a fresh tree uses the
+// cold tree.insert_ix (it bootstraps and splits), then switch to the hot path:
+let ix = tree.insert_fast_ix(&reader, authority, &key, &value)
+    .expect("empty or full leaf - use tree.insert_ix (cold)");
 // send \`ix\` with your client...
 
 // read it back: no transaction, no fee
@@ -148,7 +152,7 @@ let top = tree.best(&reader);`}</Code>}
             {/* CREATE A TREE */}
             <section>
               <H id="tree">Create a tree (once)</H>
-              <P>Pick a <span className="nums text-fg">value_size</span> (1 to 128 bytes, fixed per tree) and a fanout (64 is the default). You get header and allocator PDAs, namespaced by your creator key.</P>
+              <P>Pick a <span className="nums text-fg">value_size</span> (1 to 128 bytes, fixed per tree) and a fanout (both required; 64 is a sensible choice). You get header and allocator PDAs, namespaced by your creator key.</P>
               <DualCode
                 ts={<Code lang="typescript">{`const ix = tree.initTreeIx(payer, valueSize, /* fanout */ 64, rentHeader, rentAlloc);`}</Code>}
                 rust={<Code lang="rust">{`let ix = tree.init_tree_ix(payer, value_size, /* fanout */ 64, rent_header, rent_alloc);`}</Code>}
@@ -197,12 +201,18 @@ if let Some((_key, value)) = top {
               <H id="cold">When a leaf splits</H>
               <P>A hot insert into a full leaf returns error 102. Fall back to the cold path, which splits the leaf and grows the tree; subsequent inserts at that depth go hot again.</P>
               <DualCode
-                ts={<Code lang="typescript">{`try {
-  await send(await tree.insertFastIx(reader, authority, key, value));
+                ts={<Code lang="typescript">{`import { ERR_NEED_SPLIT_SLOT } from "torna-sdk"; // === 102
+
+const sendIx = (ix) => sendAndConfirmTransaction(connection, new Transaction().add(ix), [signer]);
+
+try {
+  const ix = await tree.insertFastIx(reader, authority, key, value);
+  if (!ix) throw new Error(String(ERR_NEED_SPLIT_SLOT)); // empty tree, no leaf yet
+  await sendIx(ix);
 } catch (e) {
-  if (isNeedSplit(e)) {
-    // cold path: the maker pays spare-node rent; the engine does the split
-    await send(await tree.insertIx(reader, payer, key, value, rentNode));
+  if (String(e).includes(String(ERR_NEED_SPLIT_SLOT))) {
+    // cold path: the maker pays spare-node rent; the engine splits the leaf
+    await sendIx(await tree.insertIx(reader, payer, key, value, rentNode));
   } else throw e;
 }`}</Code>}
                 rust={<Code lang="rust">{`// hot insert returns ERR_NEED_SPLIT_SLOT (102) on a full leaf; use the cold split path:

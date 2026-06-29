@@ -44,8 +44,8 @@ export function Throughput() {
       <text x={X(mMark) - 6} y={T + 22} textAnchor="end" fontSize="10" fill="var(--parallel)">liquid, maker-heavy book</text>
       {/* labels */}
       <text x={X(0.5)} y={H - 6} textAnchor="middle" fontSize="11" fill="var(--muted)">maker (maintenance) fraction of traffic</text>
-      <text x={W - R} y={Y(SIGMA_HI) - 8} textAnchor="end" fontSize="10" fill="var(--bid)">sigma = 6 (peak)</text>
-      <text x={W - R} y={Y(sigmaAgg(0.78, SIGMA_LO)) + 14} textAnchor="end" fontSize="10" fill="var(--bid)">sigma = 3.4 (p50)</text>
+      <text x={W - R} y={Y(SIGMA_HI) - 8} textAnchor="end" fontSize="10" fill="var(--bid)">sigma = 6 (median busy slot)</text>
+      <text x={W - R} y={Y(sigmaAgg(0.78, SIGMA_LO)) + 14} textAnchor="end" fontSize="10" fill="var(--bid)">sigma = 3.4 (peak slot)</text>
       <text x={6} y={T + 6} fontSize="10" fill="var(--muted)" transform={`rotate(-90 12 ${H / 2})`}>aggregate speedup</text>
     </svg>
   );

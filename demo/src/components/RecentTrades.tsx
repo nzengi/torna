@@ -31,7 +31,7 @@ export function RecentTrades() {
   return (
     <div className="overflow-hidden rounded-xl border border-line bg-panel">
       <div className="flex items-center justify-between border-b border-line px-4 py-2.5">
-        <span className="text-sm font-semibold text-fg">Recent trades</span>
+        <span className="text-sm font-semibold text-fg">Recent activity</span>
         <span className="flex items-center gap-1.5 text-xs text-faint">{loading && <RefreshCw className="h-3 w-3 animate-spin" aria-hidden />} live market activity</span>
       </div>
       <div className="grid grid-cols-[auto_1fr_auto_auto] gap-x-3 px-4 py-1.5 text-[11px] uppercase tracking-wide text-faint">

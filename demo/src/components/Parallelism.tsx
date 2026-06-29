@@ -21,12 +21,16 @@ export function Parallelism() {
           <div className="overflow-x-auto rounded-xl border border-line bg-panel p-5 sm:p-7">
             <Mechanism />
           </div>
+          <figcaption className="mt-3 text-center text-xs leading-relaxed text-faint">
+            Same three makers at 100, 105 and 110 on both sides. Left, one shared account serializes them
+            across three slots. Right, Torna gives each node its own account, so they commit in one slot.
+          </figcaption>
         </figure>
 
         <div className="glass neon-glow mt-6 flex flex-wrap items-center gap-x-8 gap-y-3 rounded-xl p-6">
           <div className="flex items-baseline gap-2">
             <span className="nums display text-gradient text-4xl font-semibold">3.4-6x</span>
-            <span className="text-sm text-muted">more committed tx / slot<br />disjoint vs. same-leaf</span>
+            <span className="text-sm text-muted">more committed tx/slot when makers<br />quote across prices vs. all at one price</span>
           </div>
           <p className="max-w-xl flex-1 text-xs leading-relaxed text-faint">
             Measured on a single-node solana-test-validator, the real Agave banking stage, via

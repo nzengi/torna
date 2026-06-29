@@ -388,7 +388,7 @@ function RecentTxns() {
   return (
     <div className="overflow-x-auto rounded-xl border border-line">
       <div className="flex items-center justify-between border-b border-line bg-panel-hi px-4 py-2.5">
-        <span className="text-sm font-semibold text-fg">Recent transactions</span>
+        <span className="text-sm font-semibold text-fg">Recent activity</span>
         <span className="text-xs text-faint">{loading ? "loading" : "click to decode"}</span>
       </div>
       <div className="divide-y divide-line/60">
@@ -470,7 +470,7 @@ export function Explorer() {
           <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Paste any account to decode it, or filter orders by price / maker / key"
             className="w-full rounded-lg border border-line bg-panel py-2 pl-9 pr-3 text-sm outline-none transition-colors duration-100 focus:border-brand" />
         </div>
-        <span className="flex items-center gap-1.5 text-xs text-faint">{loading && <RefreshCw className="h-3 w-3 animate-spin" aria-hidden />} {loading ? "reading on-chain" : "live, every 8s"}</span>
+        <span className="flex items-center gap-1.5 text-xs text-faint">{loading && <RefreshCw className="h-3 w-3 animate-spin" aria-hidden />} {loading ? "reading on-chain" : "live, every 20s"}</span>
         <button onClick={load} className="inline-flex items-center gap-1.5 rounded-lg border border-line bg-panel px-2.5 py-1.5 text-xs text-muted transition-colors duration-100 hover:border-muted hover:text-fg active:translate-y-px"><RefreshCw className="h-3 w-3" aria-hidden /> Refresh</button>
       </div>
 
