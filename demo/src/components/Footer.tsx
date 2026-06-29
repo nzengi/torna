@@ -11,7 +11,8 @@ export function Footer() {
             <a href="https://github.com/nzengi/torna" target="_blank" rel="noreferrer" className="flex items-center gap-1.5 font-medium text-fg transition-colors duration-100 hover:text-brand">
               <GithubIcon className="h-4 w-4" /> GitHub
             </a>
-            <a href="https://www.npmjs.com/package/torna-sdk" target="_blank" rel="noreferrer" className="font-medium text-fg transition-colors duration-100 hover:text-brand">torna-sdk on npm</a>
+            <a href="https://www.npmjs.com/package/torna-sdk" target="_blank" rel="noreferrer" className="font-medium text-fg transition-colors duration-100 hover:text-brand">torna-sdk (npm)</a>
+            <a href="https://crates.io/crates/torna-sdk" target="_blank" rel="noreferrer" className="font-medium text-fg transition-colors duration-100 hover:text-brand">torna-sdk (crates.io)</a>
           </div>
           <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
             <span className="flex items-center gap-1.5 text-muted">engine <Address value={MARKET.tornaProgramId} /></span>

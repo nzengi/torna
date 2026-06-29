@@ -148,8 +148,8 @@ export function TornaDocs() {
             ["Torna engine", "C / SBF", "The parallel ordered B+ tree, one node per account. 15 instructions."],
             ["torna-cpi", "Rust / SBF", "invoke_signed helpers so a program drives Torna as a book-authority PDA."],
             ["orderbook (TornaDEX)", "Rust / SBF", "Two-sided escrow CLOB: a market = two trees + vaults, place/cancel/match."],
-            ["torna-sdk (Rust)", "Rust client", "The PathPlanner: key-based ix builders, accounts resolved off-chain."],
-            ["torna-sdk (npm)", "TypeScript", "1:1 port of the Rust SDK, byte-equivalent, published on npm."],
+            ["torna-sdk (Rust)", "Rust client", "The PathPlanner: key-based ix builders, accounts resolved off-chain. On crates.io."],
+            ["torna-sdk (npm)", "TypeScript", "1:1 port of the Rust SDK, byte-equivalent. On npm."],
             ["cpi-probe", "Rust / SBF", "Composability proof: a program CPIs InsertFast and parallelism survives."],
           ].map((r, i) => (
             <div key={r[0]} className={`grid grid-cols-[1.2fr_0.8fr_2fr] gap-3 px-4 py-2.5 ${i % 2 ? "bg-bg-soft" : "bg-panel"}`}>
@@ -306,7 +306,7 @@ delegate   ["tdlg",   creator, tree_id]`}</Code>
         <P>
           The client is most of the value. You call with a key and value; the planner reads the tree
           off-chain and returns the exact account set. Node indices, PDA bumps, the descent path, and split
-          spares never leave the library. Published as <code className="nums rounded bg-panel-hi px-1.5 py-0.5 text-[13px] text-fg">torna-sdk</code> on npm.
+          spares never leave the library. Published as <code className="nums rounded bg-panel-hi px-1.5 py-0.5 text-[13px] text-fg">torna-sdk</code> on npm (TypeScript) and crates.io (Rust).
         </P>
         <Code lang="typescript">{`import { Tree, keys } from "torna-sdk";
 
@@ -515,7 +515,7 @@ make ts           # TS SDK: golden vectors + bankrun e2e (12/12)`}</Code>
             ["done", "Engine: 15 instructions, C for SBF, 5 adversarial rounds to convergence"],
             ["done", "torna-sdk (Rust) + torna-cpi crate"],
             ["done", "Orderbook reference CLOB: two-sided escrow, place / cancel / match, cold split, keeper compact"],
-            ["done", "TS SDK published to npm as torna-sdk@0.1.0"],
+            ["done", "SDKs published: torna-sdk on npm (TypeScript) and crates.io (Rust), v0.1.0"],
             ["done", "Deployed + live seeded market on devnet, with this demo"],
             ["next", "External audit (in-house review is not an audit)"],
             ["next", "Multi-node devnet benchmark for a stronger number"],
@@ -530,6 +530,7 @@ make ts           # TS SDK: golden vectors + bankrun e2e (12/12)`}</Code>
         <div className="mt-6 flex flex-wrap gap-x-6 gap-y-1 text-sm text-muted">
           <a className="hover:text-brand" href="https://github.com/nzengi/torna" target="_blank" rel="noreferrer">GitHub</a>
           <a className="hover:text-brand" href="https://www.npmjs.com/package/torna-sdk" target="_blank" rel="noreferrer">torna-sdk on npm</a>
+          <a className="hover:text-brand" href="https://crates.io/crates/torna-sdk" target="_blank" rel="noreferrer">torna-sdk on crates.io</a>
           <a className="hover:text-brand" href={`https://explorer.solana.com/address/${MARKET.tornaProgramId}?cluster=devnet`} target="_blank" rel="noreferrer">engine on explorer</a>
         </div>
       </section>

@@ -1,12 +1,17 @@
 # Torna
 
+[![crates.io](https://img.shields.io/crates/v/torna-sdk.svg)](https://crates.io/crates/torna-sdk)
+[![docs.rs](https://docs.rs/torna-sdk/badge.svg)](https://docs.rs/torna-sdk)
+[![npm](https://img.shields.io/npm/v/torna-sdk.svg)](https://www.npmjs.com/package/torna-sdk)
+[![license](https://img.shields.io/crates/l/torna-sdk.svg)](LICENSE)
+
 The first parallel, ordered, on-chain index primitive for Solana: a sorted key to value store where
 every B+ tree node lives in its own account, so writes at different keys carry disjoint write sets and
 the Sealevel scheduler commits them in the same slot. It is a generic sorted index, not a matching
 engine. The engine is written in C for SBF; **TornaDEX** is the reference order book built on it.
 
 - **Live demo:** TornaDEX on devnet (see `demo/`)
-- **SDK:** [`torna-sdk`](https://www.npmjs.com/package/torna-sdk) on npm (TypeScript), plus a Rust SDK
+- **SDK:** `torna-sdk` on [npm](https://www.npmjs.com/package/torna-sdk) (TypeScript) and [crates.io](https://crates.io/crates/torna-sdk) (Rust), byte-equivalent
 - **Status:** deployed on devnet, in-house adversarial-reviewed to convergence, external audit pending
 
 ## Why
@@ -35,7 +40,8 @@ textbook; it is this layout plus a client SDK that makes account resolution invi
 ## Quickstart (SDK)
 
 ```
-npm install torna-sdk @solana/web3.js
+npm install torna-sdk @solana/web3.js   # TypeScript
+cargo add torna-sdk solana-sdk           # Rust
 ```
 
 ```ts

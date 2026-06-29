@@ -1,6 +1,10 @@
 # torna-sdk
 
-TypeScript client SDK for [Torna](../), the **PathPlanner**. You call insert / update /
+[![npm](https://img.shields.io/npm/v/torna-sdk.svg)](https://www.npmjs.com/package/torna-sdk)
+[![Rust crate](https://img.shields.io/crates/v/torna-sdk.svg?label=crates.io)](https://crates.io/crates/torna-sdk)
+
+TypeScript client SDK for [Torna](../), the **PathPlanner**. A byte-equivalent Rust port is on
+[crates.io](https://crates.io/crates/torna-sdk) (docs at [docs.rs/torna-sdk](https://docs.rs/torna-sdk)). You call insert / update /
 delete / find with a 32-byte key; the planner reads the tree off-chain and produces a
 ready `TransactionInstruction` with the exact account set. `node_idx`, bumps, paths, and
 spares never leak out.

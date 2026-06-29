@@ -57,7 +57,7 @@ export default function Home() {
               { n: "Engine", l: "C / SBF", d: "the parallel B+ tree, 15 instructions", href: GH },
               { n: "Orderbook", l: "Rust / SBF", d: "two-sided escrow CLOB", href: GH },
               { n: "torna-cpi", l: "Rust crate", d: "drive Torna from your program", href: GH },
-              { n: "Rust SDK", l: "torna-sdk", d: "off-chain account planner", href: GH },
+              { n: "Rust SDK", l: "crates.io", d: "off-chain account planner", href: "https://crates.io/crates/torna-sdk" },
               { n: "TS SDK", l: "npm", d: "1:1 port, byte-equivalent", href: "https://www.npmjs.com/package/torna-sdk" },
             ].map((c) => (
               <a key={c.n} href={c.href} target="_blank" rel="noreferrer" className="group block">

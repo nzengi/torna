@@ -1,5 +1,9 @@
 # torna-sdk
 
+[![crates.io](https://img.shields.io/crates/v/torna-sdk.svg)](https://crates.io/crates/torna-sdk)
+[![docs.rs](https://docs.rs/torna-sdk/badge.svg)](https://docs.rs/torna-sdk)
+[![license](https://img.shields.io/crates/l/torna-sdk.svg)](https://github.com/nzengi/torna/blob/main/LICENSE)
+
 The Rust client SDK for [Torna](https://github.com/nzengi/torna): the **PathPlanner**. You call
 insert / update / delete / find with a 32-byte key; the planner reads the tree off-chain through an
 `AccountReader` and produces a ready `solana_sdk::instruction::Instruction` with the exact account set.
