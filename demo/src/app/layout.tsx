@@ -9,9 +9,9 @@ const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
 const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "TornaDEX, a parallel on-chain order book on Solana",
+  title: "Torna, a parallel ordered on-chain index for Solana",
   description:
-    "TornaDEX is a central limit order book built on Torna: a parallel, ordered, on-chain B+ tree index where every node is its own account, so makers quoting at different prices write in parallel.",
+    "Torna is the first parallel, ordered, on-chain index primitive for Solana: a sorted B+ tree where every node is its own account, so writes at different keys run in the same slot. Build order books, queues, leaderboards, and governance on it. TornaDEX is the live reference order book.",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {

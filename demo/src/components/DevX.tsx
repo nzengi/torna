@@ -1,8 +1,8 @@
 "use client";
 
-// Act 3 -- the DX moat. The integrator writes a key + value; the SDK resolves the exact account
-// set off-chain (node_idx, bumps, path, spares never appear). We resolve a REAL place account set
-// for a sample order against devnet to make the "what the SDK did" column concrete.
+// The DX moat. The integrator writes a key + value; the SDK resolves the exact account set off-chain
+// (node_idx, bumps, path, spares never appear). We resolve a REAL place account set for a sample order
+// against devnet to make the "what the SDK did" column concrete.
 import { useEffect, useState } from "react";
 import { Keypair } from "@solana/web3.js";
 import { placeIx, ASK } from "@/lib/orderbook";
@@ -40,12 +40,12 @@ export function DevX() {
 
   return (
     <section className="mx-auto max-w-6xl px-6 py-14">
-      <div className="mb-2 text-xs uppercase tracking-[0.2em] text-brand">The product</div>
-      <h2 className="text-2xl font-semibold tracking-tight">Account resolution is invisible</h2>
+      <div className="mb-2 text-xs font-semibold uppercase tracking-[0.2em] text-brand">Build your own on Torna</div>
+      <h2 className="display text-2xl font-semibold tracking-tight">From a key to the exact accounts</h2>
       <p className="mt-3 max-w-2xl text-sm leading-relaxed text-muted">
-        The engine is ~20% of the value; the planner is the rest. You call with a key; the SDK reads
+        This is what an integrating program does, not just TornaDEX. You call with a key; the SDK reads
         the tree and emits the exact account set. The hard parts (node indices, PDA bumps, the descent
-        path, split spares) never leave the library.
+        path, split spares) never leave the library. Below is a real place resolved live on devnet.
       </p>
 
       <div className="mt-8 grid gap-4 lg:grid-cols-2">
