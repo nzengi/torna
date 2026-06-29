@@ -1,4 +1,6 @@
 build/
+# the demo's /build route is a real Next.js source dir, not a build artifact; keep it tracked
+!demo/src/app/build/
 sbf/out/
 *-keypair.json
 integration/target/
