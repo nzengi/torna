@@ -1,50 +1,55 @@
 @import "tailwindcss";
 
-/* TornaDEX visual system -- dark financial/terminal. Defined here (Tailwind v4 @theme), see
-   brand.md for the rationale. Semantic split avoids the green-collision: trading uses
-   emerald(bid)/rose(ask); the parallelism story uses violet(parallel)/amber(serial); violet
-   is also the brand/interactive accent. Numbers are mono + tabular-nums. */
+/* TornaDEX visual system -- warm editorial LIGHT theme on cream. High-contrast ink on cream
+   for readability (AA+). Trading uses green(bid)/red(ask); the parallelism story uses
+   violet(parallel)/amber(serial); violet is the brand. Numbers are mono + tabular-nums.
+   See brand.md. */
 :root {
-  --bg: #09090b;          /* page */
-  --panel: #121317;       /* card / ladder */
-  --panel-hi: #1a1b21;    /* row hover / elevated */
-  --line: #26272e;        /* borders */
+  --bg: #f7f3ea;        /* cream page */
+  --bg-soft: #fcfaf4;   /* lighter section band */
+  --panel: #ffffff;     /* cards / ladder */
+  --panel-hi: #f1ebdd;  /* row hover / elevated */
+  --line: #e7dece;      /* borders */
 
-  --fg: #ececef;          /* primary text */
-  --muted: #9a9aa3;       /* secondary text */
-  --faint: #6a6a73;       /* tertiary / captions */
+  --ink: #1c1814;       /* primary text  (~13:1 on cream) */
+  --muted: #5c5346;     /* secondary text (~6:1) */
+  --faint: #8a7e6d;     /* captions (large/secondary only) */
 
-  --brand: #a78bfa;       /* accent / interactive / parallel */
-  --brand-hi: #8b5cf6;    /* hover / active */
-  --bid: #34d399;         /* buy / positive */
-  --ask: #fb7185;         /* sell / negative */
-  --serial: #fbbf24;      /* serialized / warning */
+  --brand: #6d28d9;     /* accent / interactive / parallel (violet-700) */
+  --brand-hi: #5b21b6;  /* hover / active */
+  --onbrand: #ffffff;   /* text on brand fills */
+  --bid: #15803d;       /* buy / positive (green-700) */
+  --ask: #dc2626;       /* sell / negative (red-600) */
+  --serial: #b45309;    /* serialized / warning (amber-700) */
 }
 
 @theme inline {
   --color-bg: var(--bg);
+  --color-bg-soft: var(--bg-soft);
   --color-panel: var(--panel);
   --color-panel-hi: var(--panel-hi);
   --color-line: var(--line);
-  --color-fg: var(--fg);
+  --color-fg: var(--ink);
   --color-muted: var(--muted);
   --color-faint: var(--faint);
   --color-brand: var(--brand);
   --color-brand-hi: var(--brand-hi);
+  --color-onbrand: var(--onbrand);
   --color-bid: var(--bid);
   --color-ask: var(--ask);
-  --color-parallel: var(--brand);
   --color-serial: var(--serial);
+  --color-parallel: var(--brand);
 
   --color-background: var(--bg);
-  --color-foreground: var(--fg);
+  --color-foreground: var(--ink);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+  --font-display: var(--font-fraunces);
 }
 
 body {
   background: var(--bg);
-  color: var(--fg);
+  color: var(--ink);
   font-family: var(--font-geist-sans), system-ui, sans-serif;
 }
 
@@ -53,3 +58,62 @@ body {
   font-family: var(--font-geist-mono), ui-monospace, monospace;
   font-variant-numeric: tabular-nums;
 }
+
+/* characterful serif for display headings */
+.display {
+  font-family: var(--font-fraunces), Georgia, serif;
+  letter-spacing: -0.01em;
+}
+
+/* brand focus ring on every interactive element */
+:where(button, a, input, [tabindex]):focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--brand);
+  border-radius: 4px;
+}
+
+/* a best-price tick flashes briefly in the direction of change, then fades to neutral */
+@keyframes tick-up { from { color: var(--bid); } to { color: inherit; } }
+@keyframes tick-down { from { color: var(--ask); } to { color: inherit; } }
+.tick-up { animation: tick-up 600ms ease-out; }
+.tick-down { animation: tick-down 600ms ease-out; }
+
+/* entrance: fade + rise. Hero uses .enter (on load); below-fold blocks use .reveal -> .in (on view) */
+@keyframes fade-up { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+.enter { animation: fade-up 600ms cubic-bezier(0, 0, 0.2, 1) both; }
+.reveal { opacity: 0; }
+.reveal.in { animation: fade-up 550ms cubic-bezier(0, 0, 0.2, 1) forwards; }
+
+/* the two parallel (hot) tree paths draw in + gently pulse to show "same slot" */
+@keyframes draw { from { stroke-dashoffset: 120; } to { stroke-dashoffset: 0; } }
+@keyframes pulse-stroke { 0%,100% { opacity: 0.55; } 50% { opacity: 1; } }
+.hot-path { stroke-dasharray: 120; animation: draw 900ms ease-out both, pulse-stroke 2.4s ease-in-out 900ms infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+  .reveal { opacity: 1; }
+}
+
+/* wallet-adapter button themed to match (violet on cream, mono address) */
+.wallet-adapter-button-trigger {
+  background: var(--brand) !important;
+  color: var(--onbrand) !important;
+  height: 36px !important;
+  padding: 0 14px !important;
+  border-radius: 8px !important;
+  font-family: var(--font-geist-mono), monospace !important;
+  font-size: 13px !important;
+  font-weight: 500 !important;
+}
+.wallet-adapter-button-trigger:hover { background: var(--brand-hi) !important; }
+.wallet-adapter-dropdown-list {
+  background: var(--panel) !important;
+  border: 1px solid var(--line) !important;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.08) !important;
+}
+.wallet-adapter-dropdown-list-item { color: var(--ink) !important; font-family: var(--font-geist-sans) !important; }
+.wallet-adapter-dropdown-list-item:hover { background: var(--panel-hi) !important; }

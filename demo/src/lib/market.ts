@@ -31,7 +31,16 @@ export interface Market {
 
 export const MARKET = marketJson as Market;
 
-export const connection = (): Connection => new Connection(MARKET.rpcUrl, "confirmed");
+// RPC endpoint: prefer a dedicated NEXT_PUBLIC_RPC_URL (Helius/Triton/etc. — far fewer 429s than
+// the shared public devnet RPC), fall back to the deployment's rpcUrl. One shared Connection is
+// reused across the app so web3.js can coalesce + rate-limit-retry centrally.
+export const rpcUrl = (): string => process.env.NEXT_PUBLIC_RPC_URL || MARKET.rpcUrl;
+
+let _conn: Connection | undefined;
+export const connection = (): Connection => {
+  if (!_conn) _conn = new Connection(rpcUrl(), "confirmed");
+  return _conn;
+};
 
 export const reader = (conn: Connection = connection()): AccountReader => ({
   async accountData(key: PublicKey): Promise<Uint8Array | null> {

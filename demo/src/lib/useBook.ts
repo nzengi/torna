@@ -38,7 +38,7 @@ export interface BookState {
   refresh: () => void;
 }
 
-export function useBook(pollMs = 4000): BookState {
+export function useBook(pollMs = 5000): BookState {
   const [asks, setAsks] = useState<Order[]>([]);
   const [bids, setBids] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
@@ -67,8 +67,18 @@ export function useBook(pollMs = 4000): BookState {
 
   useEffect(() => {
     load();
-    const id = setInterval(load, pollMs);
-    return () => clearInterval(id);
+    // don't poll a backgrounded tab (big 429 reducer); refresh on regaining focus
+    const id = setInterval(() => {
+      if (!document.hidden) load();
+    }, pollMs);
+    const onVis = () => {
+      if (!document.hidden) load();
+    };
+    document.addEventListener("visibilitychange", onVis);
+    return () => {
+      clearInterval(id);
+      document.removeEventListener("visibilitychange", onVis);
+    };
   }, [load, pollMs]);
 
   return { asks, bids, loading, error, refresh: load };

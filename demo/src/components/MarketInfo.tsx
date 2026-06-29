@@ -1,4 +1,5 @@
-import { MARKET, askTree, bidTree, explorerAddr, shorten } from "@/lib/market";
+import { MARKET, askTree, bidTree } from "@/lib/market";
+import { Address } from "./ui/Address";
 
 const askHeader = () => askTree().headerPda()[0].toBase58();
 const bidHeader = () => bidTree().headerPda()[0].toBase58();
@@ -7,9 +8,7 @@ function Addr({ label, addr }: { label: string; addr: string }) {
   return (
     <div className="flex items-center justify-between py-1.5 text-sm">
       <span className="text-muted">{label}</span>
-      <a className="nums text-fg hover:text-brand" href={explorerAddr(addr)} target="_blank" rel="noreferrer">
-        {shorten(addr)} ↗
-      </a>
+      <Address value={addr} />
     </div>
   );
 }

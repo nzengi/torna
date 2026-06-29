@@ -1,6 +1,6 @@
 {
   "cluster": "devnet",
-  "rpcUrl": "https://api.devnet.solana.com",
+  "rpcUrl": "https://devnet.helius-rpc.com/?api-key=36588937-9672-4fad-80d3-fd86fb6c4316",
   "tornaProgramId": "C2vPNBochYrcF4yCHDrtn9SPXUobsjrfPnZ2RPHUcAN5",
   "orderbookProgramId": "6aUNcngMi59XEF35feSycdBsvXGKkZHTUcCWRcTdQ9C7",
   "marketId": "1",
