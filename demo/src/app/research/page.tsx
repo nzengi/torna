@@ -60,10 +60,10 @@ const SPACE: [string, string, string][] = [
   ["High-fanout B+ tree, node per account", "chosen", "Near-optimal on all three: height ~3 (account budget), one node per account (parallelism), fanout amortizes per-account rent."],
 ];
 
-const BENCH: [string, string, string, string][] = [
-  ["A  disjoint leaves (parallel)", "28,725", "13,399", "10,614"],
-  ["B  same leaf (serial)", "29,852", "3,927", "1,749"],
-  ["C  same fee-payer (serial)", "6,246", "2,278", "1,237"],
+const BENCH: [string, string, string, string, string][] = [
+  ["A  disjoint leaves (parallel)", "28,862", "7", "13,387", "9,641"],
+  ["B  same leaf (serial)", "29,549", "21", "2,877", "1,356"],
+  ["C  same fee-payer (serial)", "6,268", "4", "3,283", "1,266"],
 ];
 const CU: [string, string][] = [
   ["InsertFast, hot path (F = 16 / 64 / 128)", "8k / 23k / 43k"],
@@ -117,7 +117,7 @@ export default function ResearchPage() {
               book in a single large account (often, though not always, with an off-chain crank), which
               serializes writes and, where a crank is used, adds a liveness dependency. We
               formalize the three scarce resources that bound any design, walk the design space we
-              explored and rejected, present Torna, and evaluate it: a measured 3.4 to 6x throughput gain
+              explored and rejected, present Torna, and evaluate it: a measured 4.6 to 7x throughput gain
               for disjoint versus contended writes on a real validator banking stage, single-key hot
               operations under the 200k compute-unit default even at fanout 128, and a correctness regimen
               of an 8,000-operation on-chain differential, 60k-iteration fuzzing, and five rounds of
@@ -355,7 +355,7 @@ export default function ResearchPage() {
               <div className="rounded-xl border border-line bg-panel p-5"><Throughput /></div>
               <figcaption className="mt-2 text-xs leading-relaxed text-faint">
                 Figure 1. Aggregate speedup as a function of how maker-heavy the book is, for the measured
-                disjoint-write ceiling σ = 3.4 (peak slot) to 6 (median busy slot). A liquid book sits to the right, where the
+                disjoint-write ceiling σ = 4.6 (peak slot) to 7.1 (median busy slot). A liquid book sits to the right, where the
                 aggregate win is close to σ; a taker-heavy book sits to the left, where it approaches 1.
               </figcaption>
             </figure>
@@ -363,30 +363,38 @@ export default function ResearchPage() {
             <h3 className="mt-10 text-sm font-semibold uppercase tracking-wide text-brand">7.2 Measured</h3>
             <P>
               <span className="font-medium text-fg">Parallelism.</span> The model predicts σ = min(W, L, P).
-              On a real single-node validator banking stage, with identical compute per transaction so the
-              only variable is the writable lock set, we measure committed transactions per roughly 400ms
-              slot under saturation across three workloads: disjoint leaves with disjoint payers (parallel),
-              the same leaf (serial), and the same fee-payer (serial). The lane count W of a single node is
-              small, so we expect a few-fold σ, with L and P large.
+              On a real single-node validator banking stage, every transaction runs identical compute: a
+              duplicate InsertFast that descends the tree and write-locks the target leaf, then returns
+              without mutating state. Compute is constant, so the only variable across workloads is the
+              writable lock set; the absolute counts reflect this one cheap, non-mutating op, and the ratio
+              between workloads is the signal. We blast 30,000 such transactions per workload and count
+              committed transactions per roughly 400ms slot under saturation across three workloads:
+              disjoint leaves with disjoint payers (parallel), the same leaf (serial), and the same
+              fee-payer (serial). The lane count W of a single node is small, so we expect a few-fold σ,
+              with L and P large.
             </P>
             <div className="mt-4 overflow-hidden rounded-xl border border-line text-sm">
-              <div className="grid grid-cols-[1.7fr_1fr_1fr_1fr] gap-3 bg-panel-hi px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-faint">
-                <span>workload</span><span className="text-right">confirmed</span><span className="text-right">peak/slot</span><span className="text-right">p50 busy</span>
+              <div className="grid grid-cols-[1.7fr_1fr_0.7fr_1fr_1fr] gap-3 bg-panel-hi px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-faint">
+                <span>workload</span><span className="text-right">confirmed</span><span className="text-right">slots</span><span className="text-right">peak/slot</span><span className="text-right">p50 busy</span>
               </div>
               {BENCH.map((r, i) => (
-                <div key={r[0]} className={`grid grid-cols-[1.7fr_1fr_1fr_1fr] gap-3 px-4 py-2.5 ${i % 2 ? "bg-bg-soft" : "bg-panel"}`}>
+                <div key={r[0]} className={`grid grid-cols-[1.7fr_1fr_0.7fr_1fr_1fr] gap-3 px-4 py-2.5 ${i % 2 ? "bg-bg-soft" : "bg-panel"}`}>
                   <span className={`font-medium ${i === 0 ? "text-bid" : "text-fg"}`}>{r[0]}</span>
                   <span className="nums text-right text-muted">{r[1]}</span>
-                  <span className="nums text-right text-fg">{r[2]}</span>
+                  <span className="nums text-right text-muted">{r[2]}</span>
                   <span className="nums text-right text-fg">{r[3]}</span>
+                  <span className="nums text-right text-fg">{r[4]}</span>
                 </div>
               ))}
             </div>
             <P>
-              Disjoint writes commit about 3.4x (peak) to 6x (median busy slot) more transactions per slot
-              than same-leaf writes, and about 5.9x to 8.6x more than same fee-payer. A single-node
-              validator has a small fixed number of banking threads, so a real cluster would widen the
-              ratio, not narrow it.
+              Disjoint writes commit about 4.6x (peak slot) to 7.1x (median busy slot) more transactions
+              per slot than same-leaf writes, and about 4.1x to 7.6x more than same fee-payer. Nearly the
+              same total confirms either way; the difference is density. Workload A packs its 28,862
+              confirmations into 7 slots, while same-leaf B smears 29,549 across 21 slots, which is exactly
+              the parallelism. A single-node validator has a small fixed number of banking threads; more
+              threads on a real cluster would raise the lane ceiling W, though cluster scheduling and
+              network overheads may offset part of the gain.
             </P>
             <Note>
               This measures book maintenance, the maker side, not matching. Top-of-book matching is

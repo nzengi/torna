@@ -49,10 +49,10 @@ const INSTRUCTIONS: [number, string, string, "hot" | "cold" | "read" | "admin"][
   [17, "UpdateFast", "Overwrite the value at an existing key in place", "hot"],
   [18, "DeleteFast", "Remove a key without rebalancing", "hot"],
 ];
-const BENCH: [string, string, string, string][] = [
-  ["A  disjoint leaves", "28,725", "13,399", "10,614"],
-  ["B  same leaf", "29,852", "3,927", "1,749"],
-  ["C  same fee-payer", "6,246", "2,278", "1,237"],
+const BENCH: [string, string, string, string, string][] = [
+  ["A  disjoint leaves", "28,862", "7", "13,387", "9,641"],
+  ["B  same leaf", "29,549", "21", "2,877", "1,356"],
+  ["C  same fee-payer", "6,268", "4", "3,283", "1,266"],
 ];
 const CU: [string, string][] = [
   ["InsertFast (F = 16 / 64 / 128)", "8k / 23k / 43k"],
@@ -361,21 +361,22 @@ const ix = await tree.insertFastIx(reader, authority, key, value);
           Metric: committed transactions per ~400ms slot under saturation.
         </P>
         <div className="mt-4 overflow-hidden rounded-xl border border-line text-sm">
-          <div className="grid grid-cols-[1.6fr_1fr_1fr_1fr] gap-3 bg-panel-hi px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-faint">
-            <span>workload</span><span className="text-right">confirmed</span><span className="text-right">peak / slot</span><span className="text-right">p50 busy</span>
+          <div className="grid grid-cols-[1.6fr_1fr_0.7fr_1fr_1fr] gap-3 bg-panel-hi px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-faint">
+            <span>workload</span><span className="text-right">confirmed</span><span className="text-right">slots</span><span className="text-right">peak / slot</span><span className="text-right">p50 busy</span>
           </div>
           {BENCH.map((r, i) => (
-            <div key={r[0]} className={`grid grid-cols-[1.6fr_1fr_1fr_1fr] gap-3 px-4 py-2.5 ${i % 2 ? "bg-bg-soft" : "bg-panel"}`}>
+            <div key={r[0]} className={`grid grid-cols-[1.6fr_1fr_0.7fr_1fr_1fr] gap-3 px-4 py-2.5 ${i % 2 ? "bg-bg-soft" : "bg-panel"}`}>
               <span className={`font-medium ${i === 0 ? "text-bid" : "text-fg"}`}>{r[0]}</span>
               <span className="nums text-right text-muted">{r[1]}</span>
-              <span className="nums text-right text-fg">{r[2]}</span>
+              <span className="nums text-right text-muted">{r[2]}</span>
               <span className="nums text-right text-fg">{r[3]}</span>
+              <span className="nums text-right text-fg">{r[4]}</span>
             </div>
           ))}
         </div>
         <P>
-          Disjoint-leaf writes commit <span className="text-bid">~3.4x (peak) to ~6x (p50-busy)</span> more
-          transactions per slot than same-leaf writes, and ~5.9x to ~8.6x more than same fee-payer. The
+          Disjoint-leaf writes commit <span className="text-bid">~4.6x (peak slot) to ~7.1x (p50-busy)</span> more
+          transactions per slot than same-leaf writes, and ~4.1x to ~7.6x more than same fee-payer. The
           same fee-payer case serializes even across different leaves, because the fee debit makes the
           payer a writable lock, so each parallel writer must fund with its own payer.
         </P>

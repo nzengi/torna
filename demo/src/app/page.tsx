@@ -35,7 +35,7 @@ export default function Home() {
         </div>
       </section>
 
-      {/* The moat: parallelism, with the honest caveat (3.4-6x lives here) */}
+      {/* The moat: parallelism, with the honest caveat (4.6-7.1x lives here) */}
       <Parallelism />
 
       {/* What you build on it */}

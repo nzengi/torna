@@ -29,7 +29,7 @@ export function Parallelism() {
 
         <div className="glass neon-glow mt-6 flex flex-wrap items-center gap-x-8 gap-y-3 rounded-xl p-6">
           <div className="flex items-baseline gap-2">
-            <span className="nums display text-gradient text-4xl font-semibold">3.4-6x</span>
+            <span className="nums display text-gradient text-4xl font-semibold">4.6-7.1x</span>
             <span className="text-sm text-muted">more committed tx/slot when makers<br />quote across prices vs. all at one price</span>
           </div>
           <p className="max-w-xl flex-1 text-xs leading-relaxed text-faint">
