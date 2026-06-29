@@ -145,7 +145,7 @@ function AccountsTable({ ov }: { ov: Overview | null }) {
     ["Quote vault (escrow)", MARKET.quoteVault, ov ? `${ov.quoteVault} quote locked` : ""],
   ];
   return (
-    <div className="overflow-hidden rounded-xl border border-line">
+    <div className="overflow-x-auto rounded-xl border border-line">
       <div className="border-b border-line bg-panel-hi px-4 py-2.5 text-sm font-semibold">Market accounts</div>
       <table className="w-full text-sm">
         <tbody>
@@ -177,7 +177,7 @@ function HeaderStats({ h }: { h: Header }) {
 }
 function LeafTable({ leaves }: { leaves: Leaf[] }) {
   return (
-    <div className="overflow-hidden rounded-xl border border-line">
+    <div className="overflow-x-auto rounded-xl border border-line">
       <div className="border-b border-line bg-panel-hi px-4 py-2 text-xs font-semibold uppercase tracking-wide text-muted">Leaf accounts (leftmost to rightmost)</div>
       <table className="w-full text-sm">
         <thead><tr className="text-[11px] uppercase tracking-wide text-faint">
@@ -241,7 +241,7 @@ function OrderDetail({ o, side }: { o: Order; side: "ask" | "bid" }) {
 function OrdersTable({ orders, side }: { orders: Order[]; side: "ask" | "bid" }) {
   const [open, setOpen] = useState<string | null>(null);
   return (
-    <div className="overflow-hidden rounded-xl border border-line">
+    <div className="overflow-x-auto rounded-xl border border-line">
       <div className="border-b border-line bg-panel-hi px-4 py-2 text-xs font-semibold uppercase tracking-wide text-muted">Resting orders ({orders.length}) · click a row for the key breakdown</div>
       <table className="w-full text-sm">
         <thead><tr className="text-[11px] uppercase tracking-wide text-faint">
@@ -384,7 +384,7 @@ function RecentTxns() {
   useEffect(() => { load(); const id = setInterval(() => { if (!document.hidden) load(); }, 8000); return () => clearInterval(id); }, [load]);
   const ago = (t: number | null) => { if (!t) return ""; const s = Math.max(0, Math.floor(Date.now() / 1000 - t)); return s < 60 ? `${s}s` : s < 3600 ? `${Math.floor(s / 60)}m` : `${Math.floor(s / 3600)}h`; };
   return (
-    <div className="overflow-hidden rounded-xl border border-line">
+    <div className="overflow-x-auto rounded-xl border border-line">
       <div className="flex items-center justify-between border-b border-line bg-panel-hi px-4 py-2.5">
         <span className="text-sm font-semibold text-fg">Recent transactions</span>
         <span className="text-xs text-faint">{loading ? "loading" : "click to decode"}</span>

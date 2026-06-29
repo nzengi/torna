@@ -1,12 +1,12 @@
 # torna-sdk
 
-TypeScript client SDK for [Torna](../) — the **PathPlanner**. You call insert / update /
+TypeScript client SDK for [Torna](../), the **PathPlanner**. You call insert / update /
 delete / find with a 32-byte key; the planner reads the tree off-chain and produces a
 ready `TransactionInstruction` with the exact account set. `node_idx`, bumps, paths, and
 spares never leak out.
 
-This is a 1:1 port of the Rust `torna-sdk`. The pure surface — `orderKey`, the PDA
-derivations, and `initTreeIx` — is asserted **byte-for-byte** against the Rust SDK (golden
+This is a 1:1 port of the Rust `torna-sdk`. The pure surface, `orderKey`, the PDA
+derivations, and `initTreeIx`, is asserted **byte-for-byte** against the Rust SDK (golden
 vectors). The full builder + planner surface (hot insert/update/delete, the cold split path,
 multi-level descent, `findIx`, `deleteIx` rebalance, `scan`/`scanAccounts`/`coldPlan`) is
 verified **end-to-end against the real engine** `torna.so` over a genuinely multi-level tree
@@ -20,13 +20,13 @@ types do this for free; the TS port checks at runtime and throws). Targets
 npm install torna-sdk @solana/web3.js
 ```
 
-Requirements: this is an **ESM-only** package (Node ≥18, or any bundler — Vite/webpack/esbuild;
+Requirements: this is an **ESM-only** package (Node ≥18, or any bundler, Vite/webpack/esbuild;
 `require()` from CommonJS is not supported). Like `@solana/web3.js` v1 it relies on the Node
 `Buffer` global, so in a browser provide a `Buffer` polyfill.
 
 ## Use
 
-Provide an `AccountReader` (anything that returns raw account bytes — an RPC `Connection`,
+Provide an `AccountReader` (anything that returns raw account bytes, an RPC `Connection`,
 a cache, or bankrun):
 
 ```ts
@@ -63,7 +63,7 @@ const v = await tree.get(reader, key);             // value at a key, or null
 ```
 
 `best`/`scan`/`get` are **point-in-time off-chain snapshots** and may be stale by the time a
-transaction lands — the on-chain matcher re-reads each order's live size at settlement. Never
+transaction lands, the on-chain matcher re-reads each order's live size at settlement. Never
 treat a read size as final; size a `Match` defensively and rely on the taker's `limit` price
 (which this SDK does not build) as the real protection against a worse-than-expected fill.
 
@@ -93,5 +93,5 @@ npm run build
 npm test       # golden-vector equivalence + bankrun e2e (needs ../sbf/out/torna.so)
 ```
 
-Layout offsets, PDA seeds, and the wire format are FROZEN — see [`../../torna_docs/abi.md`](../../torna_docs/abi.md).
+Layout offsets, PDA seeds, and the wire format are FROZEN, see [`../../torna_docs/abi.md`](../../torna_docs/abi.md).
 If the engine layout ever changes, the golden + bankrun tests fail here.

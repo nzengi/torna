@@ -6,8 +6,12 @@
 import "./polyfill";
 import { Keypair, PublicKey, Transaction, sendAndConfirmTransaction, type Connection } from "@solana/web3.js";
 import { getAssociatedTokenAddressSync } from "@solana/spl-token";
-import { ASK, cancelIx, matchIx, placeIx, type Side } from "./orderbook";
+import { keys } from "torna-sdk";
+import { ASK, cancelIx, matchIx, placeIx, placeColdIx, type Side } from "./orderbook";
 import { MARKET, askTree, bidTree, connection, marketId, orderbookProgram, reader, tornaProgram } from "./market";
+
+const N_KEY_COUNT = 2;
+const rdU16 = (d: Uint8Array, o: number) => new DataView(d.buffer, d.byteOffset, d.byteLength).getUint16(o, true);
 
 export interface Actor {
   publicKey: PublicKey;
@@ -49,10 +53,32 @@ export async function place(actor: Actor, side: Side, price: bigint, size: bigin
   const tree = side === ASK ? askTree() : bidTree();
   const makerSrc = side === ASK ? ata(MARKET.baseMint, actor.publicKey) : ata(MARKET.quoteMint, actor.publicKey);
   const vault = new PublicKey(side === ASK ? MARKET.baseVault : MARKET.quoteVault);
-  const { ix } = await placeIx({
-    reader: reader(), tree, orderbook: orderbookProgram(), torna: tornaProgram(), marketId: marketId(),
-    side, price, size, nonce: BigInt(Date.now()), maker: actor.publicKey, makerSrc, vault,
-  });
+  const r = reader();
+  const nonce = BigInt(Date.now());
+  const args = { reader: r, tree, orderbook: orderbookProgram(), torna: tornaProgram(), marketId: marketId(), side, price, size, nonce, maker: actor.publicKey, makerSrc, vault };
+
+  // Route to the cold split path when the target leaf is full (or the tree is empty), so a place
+  // never fails with ERR_NEED_SPLIT_SLOT (0x66). The split grows the tree, so subsequent places at
+  // that depth go hot again; the demo self-heals.
+  const h = await tree.header(r);
+  if (!h) throw new Error("market tree not initialized");
+  let cold = h.height === 0;
+  if (!cold) {
+    const key = keys.orderKey(side === ASK ? keys.Side.Ask : keys.Side.Bid, price, 0n, actor.publicKey, nonce);
+    const path = await tree.path(r, key);
+    if (path && path.length) {
+      const d = await r.accountData(tree.nodePda(path[path.length - 1])[0]);
+      if (d && rdU16(d, N_KEY_COUNT) >= h.fanout) cold = true;
+    }
+  }
+
+  if (cold) {
+    const rentNode = BigInt(await connection().getMinimumBalanceForRentExemption(h.nodeSize));
+    const built = await placeColdIx({ ...args, rentNode });
+    if (!built) throw new Error("could not resolve the cold place plan; please retry");
+    return actor.send(new Transaction().add(built.ix));
+  }
+  const { ix } = await placeIx(args);
   return actor.send(new Transaction().add(ix));
 }
 

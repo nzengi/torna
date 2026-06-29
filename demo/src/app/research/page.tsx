@@ -44,8 +44,8 @@ function Note({ children }: { children: React.ReactNode }) {
 }
 
 const PRIOR: [string, string, string][] = [
-  ["Slab CLOB (Serum / OpenBook v1)", "The whole book is one large account (a slab / crit-bit tree); a permissionless crank bot drains an event queue to match and settle.", "Every order operation contends on a single writable account, so placements serialize; the crank adds latency and a liveness dependency; account size caps depth."],
-  ["Crankless CLOB (Phoenix-style)", "Removes the crank by matching atomically inside the taker's transaction; no event queue.", "Market state is still one large account, so maker and taker operations still take the same write lock and serialize."],
+  ["Slab CLOB (Serum / OpenBook v1)", "As publicly described: the whole book is one large account (a slab / crit-bit tree) and a permissionless crank bot drains an event queue to match and settle.", "Every order operation contends on a single writable account, so placements serialize, and the event-queue plus crank model adds latency and a liveness dependency."],
+  ["Crankless CLOB (Phoenix-style)", "Removes the crank by matching atomically inside the taker's transaction, with no event queue.", "The market state is still concentrated in one account, so order operations on it take the same write lock and serialize."],
   ["Off-chain book + on-chain settle", "The order book lives on a relayer; only settlement is on-chain.", "Not actually on-chain: trust, liveness, and censorship move off-chain, and the book is not composable from other programs."],
   ["AMM (constant-product)", "Sidesteps the order book entirely with a pool curve.", "No limit orders and no price-time priority; capital inefficiency and impermanent loss; a different product, not an order book."],
   ["Naive on-chain B-tree", "A textbook B-tree, either in one account or with low fanout across accounts.", "One account reintroduces the slab's serial write lock; low fanout makes the tree tall, so a single operation touches too many node accounts and blows the per-transaction account budget."],
@@ -152,8 +152,9 @@ export default function ResearchPage() {
             <H id="prior" n="2.">Existing approaches and their bottlenecks</H>
             <P>
               The on-chain order book has been attempted several ways. Each makes a different tradeoff, and
-              each has a bottleneck that Torna is designed to remove. We describe them as a design family,
-              not as criticism of any specific implementation.
+              each has a bottleneck that Torna is designed to remove. We describe them at a high level as a
+              design family, not as a critique of any specific implementation; details vary by version and
+              by team.
             </P>
             <div className="mt-5 space-y-3">
               {PRIOR.map((r) => (

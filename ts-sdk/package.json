@@ -1,7 +1,7 @@
 {
   "name": "torna-sdk",
   "version": "0.1.0",
-  "description": "Torna client SDK (TypeScript) -- the PathPlanner for the parallel, ordered, on-chain B+ tree index on Solana. Resolves the exact account set off-chain so node indices, PDA bumps, paths, and split spares never leak to the integrator.",
+  "description": "Torna client SDK (TypeScript), the PathPlanner for the parallel, ordered, on-chain B+ tree index on Solana. Resolves the exact account set off-chain so node indices, PDA bumps, paths, and split spares never leak to the integrator.",
   "license": "MIT",
   "author": "nzengi",
   "homepage": "https://github.com/nzengi/torna#readme",

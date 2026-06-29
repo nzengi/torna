@@ -18,6 +18,7 @@ export const TOKEN_PROGRAM = new PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss6
 const PLACE = 0;
 const CANCEL = 1;
 const MATCH = 2;
+const PLACE_COLD = 3;
 const INIT_MARKET = 4;
 // torna engine discriminator used at setup
 const TRANSFER_AUTHORITY = 11;
@@ -136,6 +137,39 @@ export async function placeIx(args: {
     m(args.maker, true, true), m(book, false, false), m(args.torna, false, false), m(header, false, false),
     m(args.makerSrc, false, true), m(args.vault, false, true), m(TOKEN_PROGRAM, false, false), m(cfg, false, false),
     ...path.map((n, i) => m(args.tree.nodePda(n)[0], false, i === path.length - 1)),
+  ];
+  return { ix: new TransactionInstruction({ programId: args.orderbook, data, keys: meta }), key };
+}
+
+/** PlaceOrderCold (disc 3): place into a FULL leaf via the cold Insert path (split). Same escrow as
+ *  the hot place; resolves the descent path + spare node PDAs via the SDK cold plan. The maker signs
+ *  and pays spare rent; the book PDA authorizes the engine Insert. Mirrors orderbook::place_cold. */
+export async function placeColdIx(args: {
+  reader: AccountReader; tree: Tree; orderbook: PublicKey; torna: PublicKey; marketId: bigint;
+  side: Side; price: bigint; size: bigint; nonce: bigint; slot?: bigint;
+  maker: PublicKey; makerSrc: PublicKey; vault: PublicKey; rentNode: bigint;
+}): Promise<{ ix: TransactionInstruction; key: Uint8Array } | null> {
+  const slot = args.slot ?? 0n;
+  const key = keys.orderKey(sideEnum(args.side), args.price, slot, args.maker, args.nonce);
+  const plan = await args.tree.coldPlan(args.reader, key);
+  if (!plan) return null;
+  const { path, spares } = plan; // path: bigint[] (root..leaf); spares: [PublicKey, bump][] (height+2)
+  const [book, bump] = bookPda(args.orderbook, args.marketId);
+  const [cfg] = cfgPda(args.orderbook, args.marketId);
+  const header = args.tree.headerPda()[0];
+  const alloc = args.tree.allocPda()[0];
+  const data = concat([
+    Uint8Array.of(PLACE_COLD, args.side), u64le(args.price), u64le(args.size),
+    u64le(slot), u64le(args.nonce), u64le(args.marketId), Uint8Array.of(bump),
+    Uint8Array.of(path.length), Uint8Array.of(spares.length), u64le(args.rentNode),
+    Uint8Array.from(spares.map(([, b]) => b)),
+  ]);
+  const meta: AccountMeta[] = [
+    m(args.maker, true, true), m(book, false, false), m(args.torna, false, false), m(header, false, true),
+    m(args.makerSrc, false, true), m(args.vault, false, true), m(TOKEN_PROGRAM, false, false), m(cfg, false, false),
+    m(alloc, false, true), m(SystemProgram.programId, false, false),
+    ...path.map((n) => m(args.tree.nodePda(n)[0], false, true)),
+    ...spares.map(([pk]) => m(pk, false, true)),
   ];
   return { ix: new TransactionInstruction({ programId: args.orderbook, data, keys: meta }), key };
 }
