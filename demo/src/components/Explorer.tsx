@@ -311,7 +311,8 @@ function TreeView({ header, leaves, side }: { header: Header; leaves: Leaf[]; si
   );
 }
 
-interface Sig { signature: string; slot: number; err: boolean; blockTime: number | null; }
+interface Sig { signature: string; slot: number; err: boolean; blockTime: number | null; op: number; isBuy: boolean; price?: string; size?: string }
+const OP_LABEL = ["place", "cancel", "match", "place", "init"];
 const OPS = ["Place order", "Cancel order", "Match / take", "Place order (cold)", "Init market"];
 interface TxInfo { op: string; cu: number | null; fee: number; status: string; tokenCalls: number; tornaCalls: number; logs: string[]; }
 
@@ -376,12 +377,13 @@ function RecentTxns() {
   const [open, setOpen] = useState<string | null>(null);
   const load = useCallback(async () => {
     try {
-      const conn = connection();
-      const list = await conn.getSignaturesForAddress(new PublicKey(MARKET.orderbookProgramId), { limit: 12 }, "confirmed");
-      setSigs(list.map((s) => ({ signature: s.signature, slot: s.slot, err: !!s.err, blockTime: s.blockTime ?? null })));
-    } catch { /* ignore */ } finally { setLoading(false); }
+      const res = await fetch("/api/activity", { cache: "no-store" });
+      const j = await res.json();
+      setSigs((j.rows ?? []).map((r: { sig: string; slot: number; err: boolean; blockTime: number | null; op: number; isBuy: boolean; price?: string; size?: string }) =>
+        ({ signature: r.sig, slot: r.slot, err: r.err, blockTime: r.blockTime, op: r.op, isBuy: r.isBuy, price: r.price, size: r.size })));
+    } catch { /* keep last */ } finally { setLoading(false); }
   }, []);
-  useEffect(() => { load(); const id = setInterval(() => { if (!document.hidden) load(); }, 8000); return () => clearInterval(id); }, [load]);
+  useEffect(() => { load(); const id = setInterval(() => { if (!document.hidden) load(); }, 20000); return () => clearInterval(id); }, [load]);
   const ago = (t: number | null) => { if (!t) return ""; const s = Math.max(0, Math.floor(Date.now() / 1000 - t)); return s < 60 ? `${s}s` : s < 3600 ? `${Math.floor(s / 60)}m` : `${Math.floor(s / 3600)}h`; };
   return (
     <div className="overflow-x-auto rounded-xl border border-line">
@@ -393,9 +395,13 @@ function RecentTxns() {
         {sigs.map((s) => (
           <Fragment key={s.signature}>
             <button onClick={() => setOpen(open === s.signature ? null : s.signature)} className={`flex w-full items-center justify-between px-4 py-2 text-left text-sm transition-colors duration-100 hover:bg-panel-hi ${open === s.signature ? "bg-panel-hi" : ""}`}>
-              <span className="nums flex items-center gap-2 text-fg">
-                <span className={`h-1.5 w-1.5 rounded-full ${s.err ? "bg-ask" : "bg-bid"}`} aria-hidden />
-                {s.signature.slice(0, 8)}…{s.signature.slice(-6)}
+              <span className="flex items-center gap-2">
+                <span className={`rounded px-1.5 py-0.5 text-[11px] font-medium ${s.op === 2 ? "bg-brand/10 text-brand" : "bg-panel-hi text-muted"}`}>{OP_LABEL[s.op] ?? "tx"}</span>
+                {s.price !== undefined ? (
+                  <span className={`nums text-xs ${s.err ? "text-faint line-through" : s.isBuy ? "text-bid" : "text-ask"}`}>{s.isBuy ? "buy" : "sell"} {s.size} @ {s.price}</span>
+                ) : (
+                  <span className="nums text-xs text-faint">{s.op === 1 ? "cancel" : "tx"}</span>
+                )}
               </span>
               <span className="nums flex items-center gap-3 text-faint">
                 <span>slot {s.slot.toLocaleString()}</span><span>{ago(s.blockTime)}</span>
@@ -432,7 +438,7 @@ export function Explorer() {
       setAsk(a); setBid(b); setOv({ baseVault: bv, quoteVault: qv, baseDec: bd, quoteDec: qd }); setError(null);
     } catch (e) { setError(e instanceof Error ? e.message : String(e)); } finally { setLoading(false); }
   }, []);
-  useEffect(() => { load(); const id = setInterval(() => { if (!document.hidden) load(); }, 8000); const v = () => { if (!document.hidden) load(); }; document.addEventListener("visibilitychange", v); return () => { clearInterval(id); document.removeEventListener("visibilitychange", v); }; }, [load]);
+  useEffect(() => { load(); const id = setInterval(() => { if (!document.hidden) load(); }, 20000); const v = () => { if (!document.hidden) load(); }; document.addEventListener("visibilitychange", v); return () => { clearInterval(id); document.removeEventListener("visibilitychange", v); }; }, [load]);
 
   // resolve a pasted address into a decoded account view
   const pasted = useMemo(() => { try { return q.trim().length >= 32 ? new PublicKey(q.trim()) : null; } catch { return null; } }, [q]);
