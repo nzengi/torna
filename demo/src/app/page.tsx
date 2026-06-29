@@ -35,7 +35,7 @@ export default function Home() {
           <Link href="/trade" className="inline-flex items-center gap-2 rounded-lg bg-brand px-5 py-2.5 text-sm font-medium text-onbrand transition-colors duration-100 hover:bg-brand-hi active:translate-y-px">
             Launch TornaDEX, the live demo <ArrowRight className="h-4 w-4" aria-hidden />
           </Link>
-          <Link href="/docs" className="inline-flex items-center gap-2 rounded-lg border border-line bg-panel px-5 py-2.5 text-sm font-medium text-fg transition-colors duration-100 hover:border-muted active:translate-y-px">
+          <Link href="/build" className="inline-flex items-center gap-2 rounded-lg border border-line bg-panel px-5 py-2.5 text-sm font-medium text-fg transition-colors duration-100 hover:border-muted active:translate-y-px">
             Build on Torna
           </Link>
           <code className="nums rounded-lg border border-line bg-panel px-3 py-2 text-xs text-muted">npm i torna-sdk</code>

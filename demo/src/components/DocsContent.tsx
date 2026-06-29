@@ -1,13 +1,11 @@
-"use client";
-
-// Docs split into two tabs so the primitive (Torna, the dev tool) reads as distinct from the
-// reference app (TornaDEX). Torna is the default. Each tab has its own table of contents.
-import { useState } from "react";
+// Docs articles (server-rendered): the two tab bodies. The tab shell + URL-param routing lives in
+// app/docs/page.tsx, so code blocks are syntax-highlighted at build time (shiki, via CodeBlock).
 import { BTree } from "@/components/diagrams/BTree";
 import { OrderKey } from "@/components/diagrams/OrderKey";
 import { Market } from "@/components/diagrams/Market";
 import { Compare } from "@/components/Compare";
 import { Address } from "@/components/ui/Address";
+import { CodeBlock as Code } from "@/components/ui/CodeBlock";
 import { MARKET, explorerTx } from "@/lib/market";
 import tx from "@/lib/sample-tx.json";
 
@@ -21,9 +19,6 @@ function H({ id, kicker, children }: { id: string; kicker?: string; children: Re
 }
 function P({ children, className = "" }: { children: React.ReactNode; className?: string }) {
   return <p className={`mt-3 text-[15px] leading-relaxed text-muted ${className}`}>{children}</p>;
-}
-function Code({ children }: { children: string }) {
-  return <pre className="nums mt-4 overflow-x-auto rounded-lg border border-line bg-panel p-4 text-xs leading-relaxed text-fg">{children}</pre>;
 }
 function Tag({ kind }: { kind: "hot" | "cold" | "read" | "admin" }) {
   const c = kind === "hot" ? "text-bid" : kind === "cold" ? "text-ask" : kind === "read" ? "text-parallel" : "text-faint";
@@ -76,7 +71,7 @@ const RENT: [string, string, string][] = [
   ["SPL mint", "82 B", "0.001462"],
 ];
 
-const TORNA_TOC: [string, string][] = [
+export const TORNA_TOC: [string, string][] = [
   ["overview", "Overview"],
   ["stack", "The stack"],
   ["resources", "Three scarce resources"],
@@ -97,7 +92,7 @@ const TORNA_TOC: [string, string][] = [
   ["limits", "Limitations"],
   ["roadmap", "Roadmap"],
 ];
-const DEX_TOC: [string, string][] = [
+export const DEX_TOC: [string, string][] = [
   ["overview", "Overview"],
   ["live", "Live on devnet"],
   ["market", "Market structure"],
@@ -106,7 +101,7 @@ const DEX_TOC: [string, string][] = [
   ["security", "Escrow & security"],
 ];
 
-function TornaDocs() {
+export function TornaDocs() {
   return (
     <article className="min-w-0 max-w-3xl space-y-16">
       <header>
@@ -313,7 +308,7 @@ delegate   ["tdlg",   creator, tree_id]`}</Code>
           off-chain and returns the exact account set. Node indices, PDA bumps, the descent path, and split
           spares never leave the library. Published as <code className="nums rounded bg-panel-hi px-1.5 py-0.5 text-[13px] text-fg">torna-sdk</code> on npm.
         </P>
-        <Code>{`import { Tree, keys } from "torna-sdk";
+        <Code lang="typescript">{`import { Tree, keys } from "torna-sdk";
 
 const tree = new Tree(program, creator, treeId);
 const key  = keys.orderKey(keys.Side.Ask, price, slot, maker, nonce);
@@ -327,8 +322,8 @@ const ix = await tree.insertFastIx(reader, authority, key, value);
       <section>
         <H id="quickstart" kicker="Build with it">Quickstart</H>
         <P>Install the SDK and web3.js, then resolve and send instructions. Reads walk the tree off-chain with no transaction; writes are one call each.</P>
-        <Code>{`npm install torna-sdk @solana/web3.js`}</Code>
-        <Code>{`import { Connection, PublicKey } from "@solana/web3.js";
+        <Code lang="bash">{`npm install torna-sdk @solana/web3.js`}</Code>
+        <Code lang="typescript">{`import { Connection, PublicKey } from "@solana/web3.js";
 import { Tree, keys, type AccountReader } from "torna-sdk";
 
 const connection = new Connection("https://api.devnet.solana.com");
@@ -465,7 +460,7 @@ const cold = await tree.insertIx(reader, payer, key, value, rentNode);`}</Code>
       <section>
         <H id="reproduce" kicker="Run it yourself">Reproduce</H>
         <P>Everything here is reproducible from the repo. Add the Solana platform-tools to PATH, then from the engine directory:</P>
-        <Code>{`make test         # host unit + differential (assertions on)
+        <Code lang="bash">{`make test         # host unit + differential (assertions on)
 make sbf          # build the on-chain program -> sbf/out/torna.so
 make integration  # LiteSVM: smoke, inttest, cpitest, sdktest, obtest, alttest
 make diff         # on-chain differential vs an oracle (8000 ops)
@@ -474,7 +469,7 @@ make cu           # compute units at production scale (F = 16 / 64 / 128)
 make all          # all of the above
 make ts           # TS SDK: golden vectors + bankrun e2e (12/12)`}</Code>
         <P>The parallelism benchmark spins a real single-node validator and blasts disjoint vs conflicting workloads:</P>
-        <Code>{`cd bench && ./run.sh`}</Code>
+        <Code lang="bash">{`cd bench && ./run.sh`}</Code>
       </section>
 
       <section>
@@ -542,7 +537,7 @@ make ts           # TS SDK: golden vectors + bankrun e2e (12/12)`}</Code>
   );
 }
 
-function DexDocs() {
+export function DexDocs() {
   return (
     <article className="min-w-0 max-w-3xl space-y-16">
       <header>
@@ -700,43 +695,5 @@ function DexDocs() {
         </Note>
       </section>
     </article>
-  );
-}
-
-export function DocsContent() {
-  const [tab, setTab] = useState<"torna" | "tornadex">("torna");
-  const toc = tab === "torna" ? TORNA_TOC : DEX_TOC;
-  return (
-    <div className="mx-auto max-w-6xl px-6 py-12">
-      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-brand">Documentation</p>
-      <p className="mt-2 max-w-2xl text-[15px] leading-relaxed text-muted">
-        Two products, documented separately. <span className="font-medium text-fg">Torna</span> is the
-        on-chain index primitive you build on; <span className="font-medium text-fg">TornaDEX</span> is the
-        reference order book built on it.
-      </p>
-      <div className="mt-5 inline-flex rounded-xl border border-line p-1 text-sm">
-        {(["torna", "tornadex"] as const).map((t) => (
-          <button
-            key={t}
-            onClick={() => setTab(t)}
-            className={`rounded-lg px-4 py-2 font-medium transition-colors duration-100 ${tab === t ? "bg-brand text-onbrand" : "text-muted hover:text-fg"}`}
-          >
-            {t === "torna" ? "Torna · the primitive" : "TornaDEX · reference app"}
-          </button>
-        ))}
-      </div>
-
-      <div className="mt-8 gap-12 lg:grid lg:grid-cols-[210px_1fr]">
-        <aside className="hidden lg:block">
-          <nav className="sticky top-24 space-y-0.5 text-sm">
-            <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-faint">On this page</div>
-            {toc.map(([id, label]) => (
-              <a key={id} href={`#${id}`} className="block rounded px-2 py-1 text-muted transition-colors duration-100 hover:bg-panel-hi hover:text-fg">{label}</a>
-            ))}
-          </nav>
-        </aside>
-        {tab === "torna" ? <TornaDocs /> : <DexDocs />}
-      </div>
-    </div>
   );
 }
