@@ -515,7 +515,7 @@ make ts           # TS SDK: golden vectors + bankrun e2e (12/12)`}</Code>
             ["done", "Engine: 15 instructions, C for SBF, 5 adversarial rounds to convergence"],
             ["done", "torna-sdk (Rust) + torna-cpi crate"],
             ["done", "Orderbook reference CLOB: two-sided escrow, place / cancel / match, cold split, keeper compact"],
-            ["done", "SDKs published: torna-sdk on npm (TypeScript) and crates.io (Rust), v0.1.0"],
+            ["done", "Published: torna-sdk on npm + crates.io, and torna-cpi on crates.io, v0.1.0"],
             ["done", "Deployed + live seeded market on devnet, with this demo"],
             ["next", "External audit (in-house review is not an audit)"],
             ["next", "Multi-node devnet benchmark for a stronger number"],

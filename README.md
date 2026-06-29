@@ -1,5 +1,6 @@
 # Torna
 
+[![CI](https://github.com/nzengi/torna/actions/workflows/ci.yml/badge.svg)](https://github.com/nzengi/torna/actions/workflows/ci.yml)
 [![crates.io](https://img.shields.io/crates/v/torna-sdk.svg)](https://crates.io/crates/torna-sdk)
 [![docs.rs](https://docs.rs/torna-sdk/badge.svg)](https://docs.rs/torna-sdk)
 [![npm](https://img.shields.io/npm/v/torna-sdk.svg)](https://www.npmjs.com/package/torna-sdk)
@@ -30,7 +31,7 @@ textbook; it is this layout plus a client SDK that makes account resolution invi
 | `sbf/` | The Torna engine: the parallel ordered B+ tree, one node per account. 15 instructions. | C / SBF |
 | `sdk/` | Rust client SDK: the PathPlanner, key-based instruction builders. | Rust |
 | `ts-sdk/` | TypeScript SDK, a byte-equivalent 1:1 port, published as `torna-sdk`. | TypeScript |
-| `cpi/` | `torna-cpi` crate: invoke_signed helpers so a program drives Torna as a PDA authority. | Rust |
+| `cpi/` | [`torna-cpi`](https://crates.io/crates/torna-cpi) crate: invoke_signed helpers so a program drives Torna as a PDA authority. | Rust |
 | `orderbook/` | TornaDEX, the reference two-sided escrow CLOB built on Torna. | Rust / SBF |
 | `cpi-probe/` | Composability proof: a program CPIs InsertFast and parallelism survives. | Rust / SBF |
 | `bench/` | The parallelism benchmark on a real validator banking stage. | Rust |

@@ -1,0 +1,65 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Fast, reliable checks on every push/PR: the engine's host differential, the two published Rust
+# crates, the TypeScript SDK, and the demo build (which compiles against the published torna-sdk on
+# npm). The heavier on-chain suites (make sbf / integration / diff / fuzz / cu) need the Solana
+# platform-tools toolchain and are run locally; see the README.
+jobs:
+  host:
+    name: Engine host tests (C)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: make test
+        run: make test
+
+  rust:
+    name: Rust crates (sdk + cpi)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: torna-sdk tests
+        run: cargo test --manifest-path sdk/Cargo.toml
+      - name: torna-cpi build
+        run: cargo build --manifest-path cpi/Cargo.toml
+
+  ts-sdk:
+    name: TypeScript SDK
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: ts-sdk/package-lock.json
+      - name: install
+        run: npm ci
+        working-directory: ts-sdk
+      - name: build
+        run: npm run build
+        working-directory: ts-sdk
+
+  demo:
+    name: Demo build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: demo/package-lock.json
+      - name: install
+        run: npm ci
+        working-directory: demo
+      - name: build
+        run: npm run build
+        working-directory: demo
