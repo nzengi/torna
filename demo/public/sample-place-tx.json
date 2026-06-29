@@ -1,0 +1,42 @@
+{
+  "description": "A real PlaceOrder transaction on Solana devnet: the orderbook program escrows base tokens and CPIs into the Torna engine's InsertFast to insert the order into the on-chain B+ tree, atomically.",
+  "signature": "EHgckgb6VRVe5d46jA76qa3tAmcQ9FfRqFAd6YMj27jZp3aRVBVDfnfSdkQLv7ceLgedXDv1ZEk74tgV7ZT4YPT",
+  "cluster": "devnet",
+  "slot": 472820945,
+  "blockTime": 1782751721,
+  "fee_lamports": 5000,
+  "compute_units_consumed": 11048,
+  "status": "success",
+  "instruction": {
+    "program": "6aUNcngMi59XEF35feSycdBsvXGKkZHTUcCWRcTdQ9C7",
+    "name": "PlaceOrder",
+    "discriminator": 0,
+    "side": "bid",
+    "order_key_hex": "ffffffffffffffcd000000000000000001ef90dcfe5fd58b0000019f144876bc",
+    "escrow": "50 quote tokens locked in the quote vault"
+  },
+  "accounts": [
+    "8ZHJBX9Gk4buZcjSw3FJC9HnCYcQUJW8qr9trcdV9Zm",
+    "3ccwqRJ1bHZvX4d78Q2e8FuPMwFnWg3Wo2ke39A1YDRc",
+    "3EGy2BytVnzFnbfchAA5LXN3wqyAV7hxzgnfHcvrPXvK",
+    "5VyCzeqDE2DvmfvPiWbJJyfE7xKWjRvZuGnJsWeo2Ek7",
+    "6aUNcngMi59XEF35feSycdBsvXGKkZHTUcCWRcTdQ9C7",
+    "7QQkRs1GNHr85dHmjrSSvrJjzt4KXVvTQBPbooRhVNFn",
+    "9fpmgFySko9nrUeVL4PyrRnEUzuKFrHLxERHV2D9iFGU",
+    "C2vPNBochYrcF4yCHDrtn9SPXUobsjrfPnZ2RPHUcAN5",
+    "H8DiSM7rC2EBfSUYK5ftdEW4buisn1LrStATf86kfMkH",
+    "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+  ],
+  "program_log": [
+    "Program 6aUNcngMi59XEF35feSycdBsvXGKkZHTUcCWRcTdQ9C7 invoke [1]",
+    "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA invoke [2]",
+    "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA consumed 76 of 194603 compute units",
+    "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA success",
+    "Program C2vPNBochYrcF4yCHDrtn9SPXUobsjrfPnZ2RPHUcAN5 invoke [2]",
+    "Program C2vPNBochYrcF4yCHDrtn9SPXUobsjrfPnZ2RPHUcAN5 consumed 2906 of 192360 compute units",
+    "Program C2vPNBochYrcF4yCHDrtn9SPXUobsjrfPnZ2RPHUcAN5 success",
+    "Program 6aUNcngMi59XEF35feSycdBsvXGKkZHTUcCWRcTdQ9C7 consumed 11048 of 200000 compute units",
+    "Program 6aUNcngMi59XEF35feSycdBsvXGKkZHTUcCWRcTdQ9C7 success"
+  ],
+  "explorer": "https://explorer.solana.com/tx/EHgckgb6VRVe5d46jA76qa3tAmcQ9FfRqFAd6YMj27jZp3aRVBVDfnfSdkQLv7ceLgedXDv1ZEk74tgV7ZT4YPT?cluster=devnet"
+}
