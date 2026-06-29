@@ -35,6 +35,14 @@ const TOKEN_TRANSFER: u8 = 3;
 // is what stops a taker from settling against a fake tree while draining the real vault.
 const MARKET_MAGIC: u32 = 0x344b_544d; // "MTK4"
 const TORNA_MAGIC: u32 = 0x3454_4254;  // "TBT4" -- a genuine Torna header
+const TORNA_VERSION: u16 = 4;
+const H_VERSION: usize = 4;            // torna header: version u16
+const H_FLAGS: usize = 6;              // torna header: flags u16 (bit0 = open)
+const H_ROOT: usize = 54;             // torna header: root_node_idx u64
+const H_HEIGHT: usize = 62;           // torna header: height u32
+const H_AUTHORITY: usize = 90;         // torna header: authority pubkey
+const H_TREE_UID: usize = 122;        // torna header: tree_uid[16]
+const N_TREE_UID: usize = 28;         // node header: tree_uid[16]
 const MARKET_SIZE: usize = 229; // magic(4)+cfg_bump(1)+7*32 (base/quote mint, base/quote
                                 // vault, torna_program, ask_header, bid_header)
 
@@ -78,8 +86,9 @@ struct Cfg {
 }
 
 fn ta_field(a: &AccountInfo, off: usize) -> Result<[u8; 32], ProgramError> {
+    if *a.owner != TOKEN_PROGRAM { return Err(ProgramError::IllegalOwner); } // a genuine token account
     let d = a.try_borrow_data()?;
-    if d.len() < 72 { return Err(ProgramError::InvalidAccountData); } // not a token account
+    if d.len() < 72 { return Err(ProgramError::InvalidAccountData); }
     Ok(d[off..off + 32].try_into().unwrap())
 }
 
@@ -123,22 +132,23 @@ fn check_book(cfg: &Cfg, torna: &AccountInfo, header: &AccountInfo, ask_side: bo
 ///            quote_vault, system, torna_program, ask_header, bid_header]
 fn init_market(program_id: &Pubkey, accounts: &[AccountInfo], data: &[u8]) -> ProgramResult {
     if data.len() < 19 { return Err(ProgramError::InvalidInstructionData); }
-    if accounts.len() < 11 { return Err(ProgramError::NotEnoughAccountKeys); }
+    if accounts.len() < 13 { return Err(ProgramError::NotEnoughAccountKeys); }
     let market_id = rd_u64(data, 1);
-    let book_bump = data[9];
-    let cfg_bump = data[10];
-    let rent = rd_u64(data, 11);
+    let rent = rd_u64(data, 11); // data[9]/[10] (client bumps) are ignored -- we canonicalize
     let (payer, cfg, book) = (&accounts[0], &accounts[1], &accounts[2]);
     let (base_mint, quote_mint, base_vault, quote_vault) =
         (&accounts[3], &accounts[4], &accounts[5], &accounts[6]);
     let (torna, ask_header, bid_header) = (&accounts[8], &accounts[9], &accounts[10]);
+    let (ask_root, bid_root) = (&accounts[11], &accounts[12]); // each tree's root leaf (for the clean-state scan)
     if !payer.is_signer { return Err(ProgramError::MissingRequiredSignature); }
+    if ask_header.key == bid_header.key { return Err(ProgramError::InvalidArgument); } // distinct books (price-aliasing)
     let mid = market_id.to_le_bytes();
 
-    // the book authority PDA must be the canonical [b"book", market_id]
-    let book_derived = Pubkey::create_program_address(&[b"book", &mid, &[book_bump]], program_id)
-        .map_err(|_| ProgramError::InvalidArgument)?;
-    if book_derived != *book.key { return Err(ProgramError::InvalidArgument); }
+    // Canonical PDAs ONLY. A client-supplied non-canonical bump would let an attacker
+    // stand up a SHADOW cfg over an already-funded market's real vaults (round-2 #2).
+    let (book_pda, _) = Pubkey::find_program_address(&[b"book", &mid], program_id);
+    let (cfg_pda, cfg_bump) = Pubkey::find_program_address(&[b"mkt", &mid], program_id);
+    if book_pda != *book.key || cfg_pda != *cfg.key { return Err(ProgramError::InvalidArgument); }
     // vaults must be the book PDA's token accounts of the declared mints
     if ta_field(base_vault, TA_OWNER)? != book.key.to_bytes() || ta_field(base_vault, TA_MINT)? != base_mint.key.to_bytes() {
         return Err(ProgramError::InvalidArgument);
@@ -146,13 +156,40 @@ fn init_market(program_id: &Pubkey, accounts: &[AccountInfo], data: &[u8]) -> Pr
     if ta_field(quote_vault, TA_OWNER)? != book.key.to_bytes() || ta_field(quote_vault, TA_MINT)? != quote_mint.key.to_bytes() {
         return Err(ProgramError::InvalidArgument);
     }
-    // the ask/bid headers must be GENUINE Torna headers (owner == torna program, magic).
-    // The engine then enforces the book PDA as their write authority + leaf tenancy.
-    for h in [ask_header, bid_header] {
+    // Each header must be a GENUINE Torna header that ONLY the book PDA can write:
+    // owner==torna, magic, version, NOT open, authority==book PDA, value_size==40. Else an
+    // attacker could insert UNESCROWED orders directly via Torna (open/own-authority tree)
+    // and drain the vault through cancel/match (round-2 #1).
+    for (h, root_leaf) in [(ask_header, ask_root), (bid_header, bid_root)] {
         if h.owner != torna.key { return Err(ProgramError::IncorrectProgramId); }
         let hd = h.try_borrow_data()?;
-        if hd.len() < 6 || u32::from_le_bytes(hd[0..4].try_into().unwrap()) != TORNA_MAGIC {
-            return Err(ProgramError::InvalidArgument);
+        if hd.len() < H_TREE_UID + 16 { return Err(ProgramError::InvalidArgument); }
+        if u32::from_le_bytes(hd[0..4].try_into().unwrap()) != TORNA_MAGIC { return Err(ProgramError::InvalidArgument); }
+        if u16::from_le_bytes(hd[H_VERSION..H_VERSION + 2].try_into().unwrap()) != TORNA_VERSION { return Err(ProgramError::InvalidArgument); }
+        if u16::from_le_bytes(hd[H_FLAGS..H_FLAGS + 2].try_into().unwrap()) & 1 != 0 { return Err(ProgramError::InvalidArgument); } // reject OPEN
+        if hd[H_AUTHORITY..H_AUTHORITY + 32] != book.key.to_bytes() { return Err(ProgramError::InvalidArgument); }       // book PDA is the sole writer
+        let fanout = u16::from_le_bytes(hd[H_FANOUT..H_FANOUT + 2].try_into().unwrap()) as usize;
+        if u16::from_le_bytes(hd[H_VALUE_SIZE..H_VALUE_SIZE + 2].try_into().unwrap()) != 40 { return Err(ProgramError::InvalidArgument); }
+        // CLEAN STATE: the tree may hold only a 0-size sentinel, never a pre-seeded UNESCROWED
+        // order (round-3 #1). Require height <= 1 and, for the single root leaf, every value's
+        // size == 0. (Post-init the book PDA is the sole writer, so all real orders are escrowed.)
+        let height = u32::from_le_bytes(hd[H_HEIGHT..H_HEIGHT + 4].try_into().unwrap());
+        if height > 1 { return Err(ProgramError::InvalidArgument); }
+        if height == 1 {
+            if root_leaf.owner != torna.key { return Err(ProgramError::IncorrectProgramId); }
+            let rld = root_leaf.try_borrow_data()?;
+            if rld.len() < NODE_HDR { return Err(ProgramError::InvalidArgument); }
+            let root_idx = u64::from_le_bytes(hd[H_ROOT..H_ROOT + 8].try_into().unwrap());
+            if u64::from_le_bytes(rld[N_NODE_IDX..N_NODE_IDX + 8].try_into().unwrap()) != root_idx { return Err(ProgramError::InvalidArgument); }
+            if rld[N_TREE_UID..N_TREE_UID + 16] != hd[H_TREE_UID..H_TREE_UID + 16] { return Err(ProgramError::InvalidArgument); } // this tree's root
+            let voff = NODE_HDR + (fanout + 1) * 32;
+            let cnt = u16::from_le_bytes(rld[N_KEY_COUNT..N_KEY_COUNT + 2].try_into().unwrap()) as usize;
+            if rld.len() < voff + cnt * 40 { return Err(ProgramError::InvalidArgument); }
+            for i in 0..cnt {
+                if u64::from_be_bytes(rld[voff + i * 40 + 32..voff + i * 40 + 40].try_into().unwrap()) != 0 {
+                    return Err(ProgramError::InvalidArgument); // a pre-seeded order backed by no escrow
+                }
+            }
         }
     }
 
@@ -238,6 +275,7 @@ fn place(program_id: &Pubkey, accounts: &[AccountInfo], data: &[u8]) -> ProgramR
     if ta_field(&accounts[4], TA_MINT)? != want_mint { return Err(ProgramError::InvalidArgument); }
 
     // escrow into the vault (maker authorizes). ASK locks `size` base; BID `price*size` quote.
+    if size == 0 || price == 0 { return Err(ProgramError::InvalidArgument); } // no zero/0-price orders (matcher DoS)
     let escrow = if side == ASK { size } else { price.checked_mul(size).ok_or(ProgramError::ArithmeticOverflow)? };
     token_transfer(&accounts[6], &accounts[4], &accounts[5], maker, escrow, None)?;
 
@@ -253,7 +291,8 @@ fn place(program_id: &Pubkey, accounts: &[AccountInfo], data: &[u8]) -> ProgramR
 /// data: [3][side][price u64][size u64][slot u64][nonce u64][market_id u64][bump u8]
 ///        [path_len u8][spare_count u8][rent_node u64][spare_bumps * spare_count]
 /// accounts: [maker(s), market_pda, torna, header(w), maker_src(w), vault(w), token,
-///            alloc(w), system, market_cfg, path(w)..., spares(w)...]
+///            market_cfg, alloc(w), system, path(w)..., spares(w)...]
+///            (cfg=7, alloc=8, system=9, path=10..)
 fn place_cold(program_id: &Pubkey, accounts: &[AccountInfo], data: &[u8]) -> ProgramResult {
     if data.len() < 53 { return Err(ProgramError::InvalidInstructionData); }
     let side = data[1];
@@ -278,6 +317,7 @@ fn place_cold(program_id: &Pubkey, accounts: &[AccountInfo], data: &[u8]) -> Pro
     if accounts[5].key.to_bytes() != want_vault { return Err(ProgramError::InvalidArgument); }
     if ta_field(&accounts[4], TA_MINT)? != want_mint { return Err(ProgramError::InvalidArgument); }
 
+    if size == 0 || price == 0 { return Err(ProgramError::InvalidArgument); } // no zero/0-price orders (matcher DoS)
     let escrow = if side == ASK { size } else { price.checked_mul(size).ok_or(ProgramError::ArithmeticOverflow)? };
     token_transfer(&accounts[6], &accounts[4], &accounts[5], maker, escrow, None)?;
 
@@ -331,11 +371,14 @@ fn cancel(program_id: &Pubkey, accounts: &[AccountInfo], data: &[u8]) -> Program
 /// Read the size + maker of `key` from a leaf (returns err if absent).
 fn order_in_leaf(header: &AccountInfo, leaf: &AccountInfo, key: &[u8; 32]) -> Result<(u64, [u8; 32]), ProgramError> {
     let hd = header.try_borrow_data()?;
+    if hd.len() < H_VALUE_SIZE + 2 { return Err(ProgramError::InvalidAccountData); }
     let fanout = u16::from_le_bytes(hd[H_FANOUT..H_FANOUT + 2].try_into().unwrap()) as usize;
     let vs = u16::from_le_bytes(hd[H_VALUE_SIZE..H_VALUE_SIZE + 2].try_into().unwrap()) as usize;
     let ld = leaf.try_borrow_data()?;
+    if ld.len() < NODE_HDR + 2 { return Err(ProgramError::InvalidAccountData); }
     let cnt = u16::from_le_bytes(ld[N_KEY_COUNT..N_KEY_COUNT + 2].try_into().unwrap()) as usize;
     let voff = NODE_HDR + (fanout + 1) * 32;
+    if ld.len() < voff + cnt * vs { return Err(ProgramError::InvalidAccountData); } // bound the raw reads
     for i in 0..cnt {
         if &ld[NODE_HDR + i * 32..NODE_HDR + i * 32 + 32] == key {
             let vo = voff + i * vs;
@@ -391,19 +434,31 @@ fn matcher(program_id: &Pubkey, accounts: &[AccountInfo], data: &[u8]) -> Progra
     let mut nf = 0usize;
     {
         let hd = header.try_borrow_data()?;
+        if hd.len() < H_TREE_UID + 16 { return Err(ProgramError::InvalidAccountData); }
+        let huid = &hd[H_TREE_UID..H_TREE_UID + 16]; // bind every swept leaf to THIS tree (defense-in-depth)
         let fanout = u16::from_le_bytes(hd[H_FANOUT..H_FANOUT + 2].try_into().unwrap()) as usize;
         let vs = u16::from_le_bytes(hd[H_VALUE_SIZE..H_VALUE_SIZE + 2].try_into().unwrap()) as usize;
         if vs < 40 { return Err(ProgramError::InvalidAccountData); }
         let voff = NODE_HDR + (fanout + 1) * 32;
+        if num_leaves > 64 { return Err(ProgramError::InvalidInstructionData); }
+        let mut seen = [0u64; 64]; let mut nseen = 0usize; // dedup: a real next_leaf chain never revisits
         // leaf 0 must be the book's best (leftmost); each next must chain from the prev
         let mut expected = u64::from_le_bytes(hd[H_LEFTMOST..H_LEFTMOST + 8].try_into().unwrap());
         'sweep: for g in 0..num_leaves {
             if remaining == 0 || nf >= max_fills { break; }
+            // each swept leaf MUST be a genuine Torna node (no forged byte accounts to fake the
+            // chain) and MUST be distinct -- else the SAME order settles twice -> vault drain.
+            if leaf_of(g).owner != accounts[2].key { return Err(ProgramError::IllegalOwner); }
             let ld = leaf_of(g).try_borrow_data()?;
+            if ld.len() < NODE_HDR { return Err(ProgramError::InvalidAccountData); }
             if u64::from_le_bytes(ld[N_NODE_IDX..N_NODE_IDX + 8].try_into().unwrap()) != expected {
                 return Err(ProgramError::InvalidArgument); // wrong/out-of-order leaf
             }
+            if seen[..nseen].contains(&expected) { return Err(ProgramError::InvalidArgument); } // duplicate leaf
+            seen[nseen] = expected; nseen += 1;
+            if ld[0] != 1 || ld[N_TREE_UID..N_TREE_UID + 16] != *huid { return Err(ProgramError::InvalidArgument); } // a leaf of THIS tree
             let cnt = u16::from_le_bytes(ld[N_KEY_COUNT..N_KEY_COUNT + 2].try_into().unwrap()) as usize;
+            if ld.len() < voff + cnt * vs { return Err(ProgramError::InvalidAccountData); } // bound the raw reads
             for i in 0..cnt {
                 if remaining == 0 || nf >= max_fills { break; }
                 let key: [u8; 32] = ld[NODE_HDR + i * 32..NODE_HDR + i * 32 + 32].try_into().unwrap();
@@ -412,6 +467,7 @@ fn matcher(program_id: &Pubkey, accounts: &[AccountInfo], data: &[u8]) -> Progra
                 if !cross { break 'sweep; } // globally sorted -> first non-crosser ends it
                 let vo = voff + i * vs;
                 let resting = u64::from_be_bytes(ld[vo + 32..vo + 40].try_into().unwrap());
+                if resting == 0 { continue; } // skip 0-size (the sentinel / any stray) -- no slot, no delete
                 let fill = remaining.min(resting);
                 keys[nf] = key;
                 makers[nf].copy_from_slice(&ld[vo..vo + 32]);

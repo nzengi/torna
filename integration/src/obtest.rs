@@ -100,12 +100,14 @@ fn main() {
     {
         let mut d = vec![4u8]; d.extend_from_slice(&MID.to_le_bytes()); d.push(bump); d.push(cfg_bump);
         d.extend_from_slice(&rent(&svm, 229).to_le_bytes());
+        let (ar, br) = { let r = R(&svm); (ask.node_pda(ask.header(&r).unwrap().root).0, bid.node_pda(bid.header(&r).unwrap().root).0) };
         send!([&u], Instruction::new_with_bytes(ob, &d, vec![
             AccountMeta::new(u.pubkey(), true), AccountMeta::new(cfg, false), AccountMeta::new_readonly(book, false),
             AccountMeta::new_readonly(base_mint.pubkey(), false), AccountMeta::new_readonly(quote_mint.pubkey(), false),
             AccountMeta::new_readonly(base_vault.pubkey(), false), AccountMeta::new_readonly(quote_vault.pubkey(), false),
             AccountMeta::new_readonly(Pubkey::default(), false),
             AccountMeta::new_readonly(torna, false), AccountMeta::new_readonly(ask.header_pda().0, false), AccountMeta::new_readonly(bid.header_pda().0, false),
+            AccountMeta::new_readonly(ar, false), AccountMeta::new_readonly(br, false),
         ])).expect("init market");
     }
     check!(svm.get_account(&cfg).map(|a| a.data.len()) == Some(229), "InitMarket wrote the bound config");
@@ -298,6 +300,92 @@ fn main() {
         check!(send!([&m[0]], Instruction::new_with_bytes(ob, &pd, pm)).is_err(), "SECURITY: wrong-mint/vault escrow rejected");
     }
     invariants!("after rejected attacks (state unchanged)");
+
+    // ============ ROUND-2 fixes: InitMarket authority gate + zero-size guard ============
+    {
+        // zero-size order rejected (matcher fill-slot DoS guard)
+        check!(place!(m[0], ASK, 100u64, 0u64, 200u64).is_err(), "SECURITY: zero-size order rejected");
+        check!(place!(m[0], ASK, 0u64, 5u64, 201u64).is_err(), "SECURITY: zero-price order rejected");
+
+        // a market whose tree authority is NOT the book PDA is rejected at InitMarket
+        let mid2 = 2u64;
+        let (book2, _) = Pubkey::find_program_address(&[b"book", &mid2.to_le_bytes()], &ob);
+        let (cfg2, _) = Pubkey::find_program_address(&[b"mkt", &mid2.to_le_bytes()], &ob);
+        let bv2 = mk_acct(&mut svm, &base_mint.pubkey(), &book2);
+        let qv2 = mk_acct(&mut svm, &quote_mint.pubkey(), &book2);
+        let ask2 = Tree::new(torna, u.pubkey(), 5);
+        let bid2 = Tree::new(torna, u.pubkey(), 6);
+        for t in [&ask2, &bid2] { send!([&u], t.init_tree_ix(u.pubkey(), VS, F, rent(&svm, 146), rent(&svm, 32))).unwrap(); }
+        let r229 = rent(&svm, 229);
+        let init2 = |ah: Pubkey, bh: Pubkey| -> Instruction {
+            let mut d = vec![4u8]; d.extend_from_slice(&mid2.to_le_bytes()); d.push(0); d.push(0); // client bumps ignored
+            d.extend_from_slice(&r229.to_le_bytes());
+            Instruction::new_with_bytes(ob, &d, vec![
+                AccountMeta::new(u.pubkey(), true), AccountMeta::new(cfg2, false), AccountMeta::new_readonly(book2, false),
+                AccountMeta::new_readonly(base_mint.pubkey(), false), AccountMeta::new_readonly(quote_mint.pubkey(), false),
+                AccountMeta::new_readonly(bv2.pubkey(), false), AccountMeta::new_readonly(qv2.pubkey(), false),
+                AccountMeta::new_readonly(Pubkey::default(), false),
+                AccountMeta::new_readonly(torna, false), AccountMeta::new_readonly(ah, false), AccountMeta::new_readonly(bh, false),
+                AccountMeta::new_readonly(Pubkey::default(), false), AccountMeta::new_readonly(Pubkey::default(), false), // root leaves (empty tree -> unused)
+                AccountMeta::new_readonly(Pubkey::new_unique(), false)]) // unique trailing -> distinct tx (no LiteSVM dedup)
+        };
+        // authority still = creator (not book2) -> rejected (CRITICAL #1: no open/foreign tree)
+        check!(send!([&u], init2(ask2.header_pda().0, bid2.header_pda().0)).is_err(), "SECURITY: InitMarket rejects a tree not authority-bound to the book PDA");
+        // transfer both to book2, then InitMarket succeeds
+        for t in [&ask2, &bid2] { let mut d = vec![11u8]; d.extend_from_slice(book2.as_ref());
+            send!([&u], Instruction::new_with_bytes(torna, &d, vec![AccountMeta::new(t.header_pda().0, false), AccountMeta::new_readonly(u.pubkey(), true)])).unwrap(); }
+        check!(send!([&u], init2(ask2.header_pda().0, bid2.header_pda().0)).is_ok(), "InitMarket succeeds once authority == book PDA");
+        // re-init the same market -> rejected (cfg PDA already exists)
+        check!(send!([&u], init2(ask2.header_pda().0, bid2.header_pda().0)).is_err(), "SECURITY: re-InitMarket rejected (cfg exists)");
+        // ask_header == bid_header rejected (cross-book price aliasing -- round-3 HIGH)
+        check!(send!([&u], init2(ask2.header_pda().0, ask2.header_pda().0)).is_err(), "SECURITY: InitMarket rejects ask_header == bid_header");
+    }
+
+    // a tree PRE-SEEDED with a size>0 order is rejected at InitMarket (round-3 #1: no unescrowed orders)
+    {
+        let mid3 = 3u64;
+        let (book3, _) = Pubkey::find_program_address(&[b"book", &mid3.to_le_bytes()], &ob);
+        let (cfg3, _) = Pubkey::find_program_address(&[b"mkt", &mid3.to_le_bytes()], &ob);
+        let bv3 = mk_acct(&mut svm, &base_mint.pubkey(), &book3);
+        let qv3 = mk_acct(&mut svm, &quote_mint.pubkey(), &book3);
+        let ask3 = Tree::new(torna, u.pubkey(), 7);
+        let bid3 = Tree::new(torna, u.pubkey(), 8);
+        for t in [&ask3, &bid3] { send!([&u], t.init_tree_ix(u.pubkey(), VS, F, rent(&svm, 146), rent(&svm, 32))).unwrap(); }
+        // attack: creator seeds a SIZE>0 ask with NO escrow, then would transfer + init
+        let k = keys::order_key(keys::Side::Ask, 100, 0, &u.pubkey(), 0);
+        let mut v = vec![0u8; VS as usize]; v[0..32].copy_from_slice(u.pubkey().as_ref()); v[32..40].copy_from_slice(&7u64.to_be_bytes());
+        let ix = { let r = R(&svm); ask3.insert_ix(&r, u.pubkey(), &k, &v, rent(&svm, ns)).unwrap() }; send!([&u], ix).unwrap();
+        let ks = keys::order_key(keys::Side::Bid, 1, 0, &u.pubkey(), 0);
+        let mut v0 = vec![0u8; VS as usize]; v0[0..32].copy_from_slice(u.pubkey().as_ref());
+        let ix2 = { let r = R(&svm); bid3.insert_ix(&r, u.pubkey(), &ks, &v0, rent(&svm, ns)).unwrap() }; send!([&u], ix2).unwrap();
+        for t in [&ask3, &bid3] { let mut d = vec![11u8]; d.extend_from_slice(book3.as_ref());
+            send!([&u], Instruction::new_with_bytes(torna, &d, vec![AccountMeta::new(t.header_pda().0, false), AccountMeta::new_readonly(u.pubkey(), true)])).unwrap(); }
+        let (ar3, br3) = { let r = R(&svm); (ask3.node_pda(ask3.header(&r).unwrap().root).0, bid3.node_pda(bid3.header(&r).unwrap().root).0) };
+        let mut d = vec![4u8]; d.extend_from_slice(&mid3.to_le_bytes()); d.push(0); d.push(0); d.extend_from_slice(&rent(&svm, 229).to_le_bytes());
+        let m = vec![AccountMeta::new(u.pubkey(), true), AccountMeta::new(cfg3, false), AccountMeta::new_readonly(book3, false),
+            AccountMeta::new_readonly(base_mint.pubkey(), false), AccountMeta::new_readonly(quote_mint.pubkey(), false),
+            AccountMeta::new_readonly(bv3.pubkey(), false), AccountMeta::new_readonly(qv3.pubkey(), false), AccountMeta::new_readonly(Pubkey::default(), false),
+            AccountMeta::new_readonly(torna, false), AccountMeta::new_readonly(ask3.header_pda().0, false), AccountMeta::new_readonly(bid3.header_pda().0, false),
+            AccountMeta::new_readonly(ar3, false), AccountMeta::new_readonly(br3, false)];
+        check!(send!([&u], Instruction::new_with_bytes(ob, &d, m)).is_err(), "SECURITY: InitMarket rejects a tree pre-seeded with an unescrowed order");
+    }
+
+    // a non-Torna leaf in the match sweep is rejected (round-3 #2: owner-check stops double-settle)
+    {
+        let p = { let r = R(&svm); ask.path(&r, &keys::order_key(keys::Side::Ask, 1_000_000, 0, &u.pubkey(), 0)).unwrap() };
+        let mut d = vec![2u8, ASK]; d.extend_from_slice(&1_000_000u64.to_le_bytes()); d.extend_from_slice(&1u64.to_le_bytes());
+        d.push(1); d.extend_from_slice(&MID.to_le_bytes()); d.push(bump); d.push(1); d.push(p.len() as u8);
+        let mut m = vec![AccountMeta::new(taker.pubkey(), true), AccountMeta::new_readonly(book, false),
+            AccountMeta::new_readonly(torna, false), AccountMeta::new_readonly(ask.header_pda().0, false),
+            AccountMeta::new(base_vault.pubkey(), false), AccountMeta::new(base_of[&taker.pubkey()].pubkey(), false),
+            AccountMeta::new(quote_of[&taker.pubkey()].pubkey(), false), AccountMeta::new_readonly(token, false),
+            AccountMeta::new_readonly(cfg, false), AccountMeta::new(quote_of[&taker.pubkey()].pubkey(), false)];
+        for (i, &n) in p.iter().enumerate() {
+            let pk = if i == p.len() - 1 { Pubkey::new_unique() } else { ask.node_pda(n).0 }; // bogus leaf
+            m.push(if i == p.len() - 1 { AccountMeta::new(pk, false) } else { AccountMeta::new_readonly(pk, false) });
+        }
+        check!(send!([&taker], Instruction::new_with_bytes(ob, &d, m)).is_err(), "SECURITY: non-Torna leaf in match sweep rejected");
+    }
 
     println!("\nobtest (orderbook: conservation + security): pass={pass} fail={fail} -> {}",
              if fail == 0 { "ALL PASS" } else { "FAILURES" });
