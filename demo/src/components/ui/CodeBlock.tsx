@@ -1,5 +1,5 @@
 import { codeToHtml } from "shiki";
-import { Terminal } from "lucide-react";
+import { CopyButton } from "./CopyButton";
 
 // Syntax-highlighted code, rendered at BUILD time with shiki (One Dark Pro). Server-only, so no
 // highlighter ships to the client. Use a real lang ("typescript", "rust", "bash") or "text".
@@ -9,7 +9,7 @@ export async function CodeBlock({ lang = "text", children }: { lang?: string; ch
     <div className="mt-4 overflow-hidden rounded-lg border border-line">
       <div className="flex items-center justify-between border-b border-line bg-panel px-4 py-2">
         <span className="text-[11px] font-semibold uppercase tracking-wide text-faint">{lang === "text" ? "code" : lang}</span>
-        <Terminal className="h-3.5 w-3.5 text-faint" aria-hidden />
+        <CopyButton text={children.trim()} />
       </div>
       <div
         style={{ fontFamily: "var(--font-geist-mono), ui-monospace, monospace" }}

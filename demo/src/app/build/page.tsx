@@ -1,36 +1,37 @@
 import Link from "next/link";
-import { ArrowRight, Boxes, Cpu, Gauge, Layers, ListOrdered, Trophy, Vote, Wallet } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 import { GithubIcon } from "@/components/ui/GithubIcon";
 import { CodeBlock as Code } from "@/components/ui/CodeBlock";
+import { Address } from "@/components/ui/Address";
+import { LangProvider, LangToggle, DualCode } from "@/components/ui/LangTabs";
+import { MARKET } from "@/lib/market";
 
 export const metadata = {
   title: "Build on Torna",
   description:
-    "Why Solana developers use Torna, who it is for, and how to integrate it: a sorted, parallel on-chain index with a typed SDK and a CPI crate.",
+    "A code-first guide to integrating Torna in TypeScript or Rust: install, write on the hot path, read off-chain, handle splits, drive it from your own program over CPI, and a complete worked example.",
 };
 
 const GH = "https://github.com/nzengi/torna";
 
 const TOC: [string, string][] = [
-  ["why", "Why Torna"],
-  ["who", "Who it is for"],
-  ["how", "How to integrate"],
-  ["steps", "Four steps"],
-  ["examples", "Model your domain"],
-  ["compare", "vs roll-your-own"],
-  ["cost", "Cost & limits"],
+  ["setup", "Setup"],
+  ["quickstart", "Quickstart"],
+  ["tree", "Create a tree"],
+  ["write", "Write"],
+  ["read", "Read"],
+  ["cold", "When a leaf splits"],
+  ["onchain", "From your program"],
+  ["example", "Full example"],
+  ["errors", "Errors & staleness"],
+  ["reference", "Reference"],
 ];
 
-function H({ id, kicker, children }: { id: string; kicker?: string; children: React.ReactNode }) {
-  return (
-    <div id={id} className="scroll-mt-24">
-      {kicker && <div className="mb-1.5 text-xs font-semibold uppercase tracking-[0.2em] text-brand">{kicker}</div>}
-      <h2 className="display text-2xl font-semibold tracking-tight text-fg">{children}</h2>
-    </div>
-  );
+function H({ id, children }: { id: string; children: React.ReactNode }) {
+  return <h2 id={id} className="display scroll-mt-24 text-xl font-semibold tracking-tight text-fg">{children}</h2>;
 }
 function P({ children }: { children: React.ReactNode }) {
-  return <p className="mt-3 text-[15px] leading-relaxed text-muted">{children}</p>;
+  return <p className="mt-2 text-[14px] leading-relaxed text-muted">{children}</p>;
 }
 
 export default function BuildPage() {
@@ -45,231 +46,270 @@ export default function BuildPage() {
         </nav>
       </aside>
 
-      <article className="min-w-0 max-w-3xl">
-        <header className="border-b border-line pb-8">
-          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-brand">For developers</p>
-          <h1 className="display mt-2 text-4xl font-semibold leading-tight tracking-tight">
-            Build on <span className="text-gradient">Torna</span>
-          </h1>
-          <P>
-            Ship sorted, parallel on-chain state without a slab allocator or an indexer. You bring a key
-            and a value; the SDK resolves every account off-chain, or your program drives Torna over a CPI.
-          </P>
-          <div className="mt-5 flex flex-wrap items-center gap-2.5 text-sm">
-            <code className="nums rounded-lg border border-line bg-panel px-3 py-1.5 text-fg">npm i torna-sdk</code>
-            <Link href="/docs" className="inline-flex items-center gap-1.5 rounded-lg bg-brand px-3.5 py-1.5 font-medium text-onbrand transition-colors duration-100 hover:bg-brand-hi">Quickstart <ArrowRight className="h-3.5 w-3.5" aria-hidden /></Link>
-            <a href={GH} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 rounded-lg border border-line bg-panel px-3.5 py-1.5 font-medium text-fg transition-colors duration-100 hover:border-muted"><GithubIcon className="h-3.5 w-3.5" /> GitHub</a>
-          </div>
-        </header>
-
-        <div className="space-y-14 py-10">
-          {/* WHY */}
-          <section>
-            <H id="why" kicker="Why">What you skip, what you get</H>
-            <P>On-chain sorted state with many writers is the hard case on Solana. Torna is the part you would otherwise build yourself, and get subtly wrong.</P>
-            <div className="mt-5 grid gap-4 sm:grid-cols-2">
-              <div className="rounded-xl border border-ask/30 bg-ask/[0.05] p-4">
-                <div className="text-sm font-semibold text-ask">You skip writing</div>
-                <ul className="mt-2 space-y-1.5 text-sm text-muted">
-                  <li>A slab allocator and account packing</li>
-                  <li>An off-chain indexer to read state back</li>
-                  <li>The single-account write-lock and the crank around it</li>
-                  <li>PDA, bump, path, and split-spare bookkeeping</li>
-                  <li>Your own B-tree rebalancing, with its own bugs</li>
-                </ul>
-              </div>
-              <div className="rounded-xl border border-bid/30 bg-bid/[0.05] p-4">
-                <div className="text-sm font-semibold text-bid">You get</div>
-                <ul className="mt-2 space-y-1.5 text-sm text-muted">
-                  <li>A sorted index that parallelizes (disjoint writes, same slot)</li>
-                  <li>Off-chain reads with no transaction and no fee</li>
-                  <li>A Rust and a TypeScript SDK that hide account resolution</li>
-                  <li>A CPI crate to drive it from your own program</li>
-                  <li>One audited primitive, not a per-project reimplementation</li>
-                </ul>
-              </div>
+      <LangProvider>
+        <article className="min-w-0 max-w-3xl">
+          <header className="border-b border-line pb-6">
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-brand">Build on Torna</p>
+            <h1 className="display mt-2 text-3xl font-semibold tracking-tight">A sorted, parallel index in a few lines</h1>
+            <P>
+              You bring a 32-byte key and a value; the SDK resolves every account off-chain and hands you a
+              ready instruction. Node indices, PDA bumps, the descent path, and split spares never appear in
+              your code.
+            </P>
+            <Code lang="bash">{`npm i torna-sdk @solana/web3.js      # TypeScript client
+cargo add torna-sdk solana-sdk       # Rust client`}</Code>
+            <div className="mt-3 flex items-center gap-2 text-xs text-faint">
+              <span>Code samples in</span>
+              <LangToggle />
             </div>
-          </section>
+          </header>
 
-          {/* WHO */}
-          <section>
-            <H id="who" kicker="Who">Who it is for</H>
-            <P>Any protocol with sorted state, concurrent writers, and on-chain queryability. If your design has one hot account everyone writes, Torna is the fix.</P>
-            <div className="mt-5 grid gap-3 sm:grid-cols-2">
-              {[
-                { icon: Gauge, t: "DEX and CLOB", d: "Price-time priority, parallel quotes, real escrow." },
-                { icon: ListOrdered, t: "Lending and perps", d: "Liquidation queues sorted by health; keepers pop the worst." },
-                { icon: Trophy, t: "Gaming and social", d: "Leaderboards and top-N with concurrent score updates." },
-                { icon: Vote, t: "DAOs and governance", d: "Sorted stake or votes, queryable without an indexer." },
-                { icon: Boxes, t: "Queues and schedulers", d: "Ordered by deadline; soonest expiry is the leftmost leaf." },
-                { icon: Layers, t: "Any sorted index", d: "Generic key to value, value up to 128 bytes per tree." },
-              ].map((c) => (
-                <div key={c.t} className="flex gap-3 rounded-xl border border-line bg-panel p-3.5">
-                  <c.icon className="mt-0.5 h-4 w-4 shrink-0 text-brand" aria-hidden />
-                  <div><div className="text-sm font-semibold text-fg">{c.t}</div><p className="mt-0.5 text-[13px] leading-relaxed text-muted">{c.d}</p></div>
+          <div className="space-y-12 py-8">
+            {/* SETUP */}
+            <section>
+              <H id="setup">Setup</H>
+              <P>The snippets use a few values you provide:</P>
+              <div className="mt-3 space-y-2 text-[14px]">
+                <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                  <code className="nums rounded bg-panel-hi px-1.5 py-0.5 text-[13px] text-fg">program</code>
+                  <span className="text-muted">the Torna engine program. On devnet:</span>
+                  <Address value={MARKET.tornaProgramId} />
                 </div>
-              ))}
-            </div>
-            <P>It is the wrong tool for tiny datasets, data with no ordering, or workloads with no concurrent writers.</P>
-          </section>
+                <div className="flex flex-wrap items-baseline gap-x-2">
+                  <code className="nums rounded bg-panel-hi px-1.5 py-0.5 text-[13px] text-fg">creator</code>
+                  <span className="text-muted">the pubkey that namespaces your trees (your project key).</span>
+                </div>
+                <div className="flex flex-wrap items-baseline gap-x-2">
+                  <code className="nums rounded bg-panel-hi px-1.5 py-0.5 text-[13px] text-fg">authority / signer / payer</code>
+                  <span className="text-muted">the keypair that signs writes and pays fees.</span>
+                </div>
+              </div>
+              <P>Deploy your own engine, or build against the devnet program above; the trade demo and the reference order book both run on it.</P>
+            </section>
 
-          {/* HOW */}
-          <section>
-            <H id="how" kicker="How">Two ways to integrate</H>
-            <P>Pick by who owns the tree. Both use the same engine and the same off-chain reads.</P>
+            {/* QUICKSTART */}
+            <section>
+              <H id="quickstart">Quickstart</H>
+              <P>Insert a key and read it back. The only thing you implement is an <span className="nums text-fg">AccountReader</span> over your transport.</P>
+              <DualCode
+                ts={<Code lang="typescript">{`import { Connection, PublicKey, Transaction, sendAndConfirmTransaction } from "@solana/web3.js";
+import { Tree, keys, type AccountReader } from "torna-sdk";
 
-            <div className="mt-5 rounded-xl border border-line bg-panel p-4">
-              <div className="text-sm font-semibold text-fg">Which SDK do I use? One, by your language.</div>
-              <ul className="mt-2 space-y-1.5 text-[13px] text-muted">
-                <li><span className="font-medium text-fg">A client, app, bot, or script:</span> torna-sdk, in TypeScript (npm) or Rust (crate). Pick one, your stack.</li>
-                <li><span className="font-medium text-fg">An on-chain program:</span> torna-cpi (Rust), plus a client SDK for tests and scripts.</li>
-                <li><span className="font-medium text-fg">A full dApp:</span> a Rust program (torna-cpi) and a TypeScript frontend (torna-sdk), the same split every Solana app has.</li>
-              </ul>
-              <p className="mt-2 text-[13px] text-faint">You never write C. That is the engine, already deployed and audited-in-house.</p>
-            </div>
+const connection = new Connection("https://api.devnet.solana.com", "confirmed");
 
-            <div className="mt-7 flex items-center gap-2">
-              <Wallet className="h-4 w-4 text-brand" aria-hidden />
-              <h3 className="text-sm font-semibold text-fg">A. Client-driven (off-chain)</h3>
-            </div>
-            <P>Your app or a keypair is the tree authority. The SDK reads the tree, builds the instruction with the exact accounts, and you sign and send. The simplest path.</P>
-            <Code lang="typescript">{`import { Tree, keys } from "torna-sdk";
+// the SDK reads the tree through this; back it with RPC, a cache, or LiteSVM
+const reader: AccountReader = {
+  async accountData(key) {
+    const acc = await connection.getAccountInfo(key, "confirmed");
+    return acc ? Uint8Array.from(acc.data) : null;
+  },
+};
 
-const tree = new Tree(program, creator, treeId);
-const key  = keys.orderKey(keys.Side.Ask, price, slot, maker, nonce);
+const tree = new Tree(program, creator, 1);
 
-// the planner resolves the exact accounts off-chain
+// a 32-byte key + a value (here, an order-book key; any sorted key works)
+const key = keys.orderKey(keys.Side.Ask, 100n, 0n, maker, 1n);
+const value = orderValue;
+
+// the planner resolves the exact accounts; you sign and send
 const ix = await tree.insertFastIx(reader, authority, key, value);
-await sendAndConfirm(connection, new Transaction().add(ix), [signer]);`}</Code>
+await sendAndConfirmTransaction(connection, new Transaction().add(ix), [signer]);
 
-            <div className="mt-7 flex items-center gap-2">
-              <Cpu className="h-4 w-4 text-brand" aria-hidden />
-              <h3 className="text-sm font-semibold text-fg">B. Program-driven (on-chain CPI)</h3>
-            </div>
-            <P>Your program owns the tree as a PDA authority and calls Torna over a CPI with the <span className="nums text-fg">torna-cpi</span> crate. This is how TornaDEX works: the book PDA is the authority, and place / cancel CPI into Torna while the program enforces escrow.</P>
-            <Code lang="rust">{`use torna_cpi;
+// read it back: no transaction, no fee
+const top = await tree.best(reader);`}</Code>}
+                rust={<Code lang="rust">{`use solana_sdk::pubkey::Pubkey;
+use torna_sdk::{AccountReader, Tree, keys};
 
-// your program signs as the tree authority PDA
+// the SDK reads the tree through this; back it with RPC, a cache, or LiteSVM
+struct Reader;
+impl AccountReader for Reader {
+    fn account_data(&self, key: &Pubkey) -> Option<Vec<u8>> {
+        // fetch and return the raw account bytes for \`key\`
+        unimplemented!()
+    }
+}
+
+let reader = Reader;
+let tree = Tree::new(program, creator, 1);
+
+// a 32-byte key + a value (here, an order-book key; any sorted key works)
+let key = keys::order_key(keys::Side::Ask, 100, 0, &maker, 1);
+let value = order_value;
+
+// the planner resolves the exact accounts; you sign and send
+let ix = tree.insert_fast_ix(&reader, authority, &key, &value).unwrap();
+// send \`ix\` with your client...
+
+// read it back: no transaction, no fee
+let top = tree.best(&reader);`}</Code>}
+              />
+            </section>
+
+            {/* CREATE A TREE */}
+            <section>
+              <H id="tree">Create a tree (once)</H>
+              <P>Pick a <span className="nums text-fg">value_size</span> (1 to 128 bytes, fixed per tree) and a fanout (64 is the default). You get header and allocator PDAs, namespaced by your creator key.</P>
+              <DualCode
+                ts={<Code lang="typescript">{`const ix = tree.initTreeIx(payer, valueSize, /* fanout */ 64, rentHeader, rentAlloc);`}</Code>}
+                rust={<Code lang="rust">{`let ix = tree.init_tree_ix(payer, value_size, /* fanout */ 64, rent_header, rent_alloc);`}</Code>}
+              />
+            </section>
+
+            {/* WRITE */}
+            <section>
+              <H id="write">Write (hot path)</H>
+              <P>Header read-only, only the target leaf writable, no CPI. So disjoint-key writes from different fee-payers commit in the same slot.</P>
+              <DualCode
+                ts={<Code lang="typescript">{`const insert = await tree.insertFastIx(reader, authority, key, value);     // add
+const update = await tree.updateFastIx(reader, authority, key, newValue);  // overwrite in place
+const remove = await tree.deleteFastIx(reader, authority, key);            // remove`}</Code>}
+                rust={<Code lang="rust">{`let insert = tree.insert_fast_ix(&reader, authority, &key, &value);      // add
+let update = tree.update_fast_ix(&reader, authority, &key, &new_value);  // overwrite in place
+let remove = tree.delete_fast_ix(&reader, authority, &key);             // remove`}</Code>}
+              />
+              <P>Each parallel writer must fund with its own fee-payer, or they serialize on the fee debit.</P>
+            </section>
+
+            {/* READ */}
+            <section>
+              <H id="read">Read (off-chain, free)</H>
+              <P>Reads walk the tree over your reader. No transaction, no fee. They return the key and value as raw bytes; decode the value with your own layout.</P>
+              <DualCode
+                ts={<Code lang="typescript">{`const top  = await tree.best(reader);       // smallest key (top of book)
+const page = await tree.scan(reader, 16);   // first 16 entries in order
+const val  = await tree.get(reader, key);   // one value by key
+
+if (top) {
+  const player = new PublicKey(top.value);  // e.g. a leaderboard value is a 32-byte pubkey
+}`}</Code>}
+                rust={<Code lang="rust">{`let top  = tree.best(&reader);       // smallest key (top of book)
+let page = tree.scan(&reader, 16);   // first 16 entries in order
+let val  = tree.get(&reader, &key);  // one value by key
+
+if let Some((_key, value)) = top {
+    let player = Pubkey::try_from(&value[..32]).unwrap(); // decode your value layout
+}`}</Code>}
+              />
+            </section>
+
+            {/* COLD */}
+            <section>
+              <H id="cold">When a leaf splits</H>
+              <P>A hot insert into a full leaf returns error 102. Fall back to the cold path, which splits the leaf and grows the tree; subsequent inserts at that depth go hot again.</P>
+              <DualCode
+                ts={<Code lang="typescript">{`try {
+  await send(await tree.insertFastIx(reader, authority, key, value));
+} catch (e) {
+  if (isNeedSplit(e)) {
+    // cold path: the maker pays spare-node rent; the engine does the split
+    await send(await tree.insertIx(reader, payer, key, value, rentNode));
+  } else throw e;
+}`}</Code>}
+                rust={<Code lang="rust">{`// hot insert returns ERR_NEED_SPLIT_SLOT (102) on a full leaf; use the cold split path:
+let ix = tree.insert_ix(&reader, payer, &key, &value, rent_node);`}</Code>}
+              />
+            </section>
+
+            {/* ON-CHAIN */}
+            <section>
+              <H id="onchain">From your program (CPI)</H>
+              <P>When invariants must live on-chain (escrow, access control), your program owns the tree as a PDA authority and CPIs Torna with the <span className="nums text-fg">torna-cpi</span> crate. This is inherently Rust, and exactly how the reference order book inserts and cancels.</P>
+              <Code lang="rust">{`use torna_cpi;
+
+// your program signs as the tree-authority PDA; the client resolved \`path\`
 let seeds: &[&[u8]] = &[b"book", &market_id.to_le_bytes(), &[bump]];
 
 torna_cpi::insert_fast(
-    torna_program, authority_pda, header,
-    path_accounts, &key, &value, &[seeds],
+    torna_program, // the Torna engine program
+    authority,     // your authority PDA
+    header,        // the tree header
+    path,          // root..leaf accounts (client-resolved)
+    &key,
+    &value,
+    &[seeds],
 )?;`}</Code>
-          </section>
+            </section>
 
-          {/* STEPS */}
-          <section>
-            <H id="steps" kicker="Integrate">Four steps</H>
-            <div className="mt-5 space-y-2.5">
-              {[
-                ["Install", "npm i torna-sdk @solana/web3.js for TypeScript, or cargo add torna-sdk solana-sdk for Rust (plus torna-cpi for an on-chain program)."],
-                ["Create a tree once", "InitTree with a value_size (1 to 128 bytes) and a fanout (64 default). You get header + allocator PDAs, namespaced by your creator key."],
-                ["Write on the hot path", "insertFastIx / updateFastIx / deleteFastIx: the header is read-only and only the leaf is writable, so disjoint-key writes from different payers commit in the same slot."],
-                ["Read off-chain", "best, scan, get: the SDK walks the tree over RPC with no transaction. For a program, add the CPI from your handler and let Torna do the structure work."],
-              ].map(([t, d], i) => (
-                <div key={t} className="flex gap-3.5 rounded-xl border border-line bg-panel p-4">
-                  <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-brand/15 text-xs font-semibold text-brand">{i + 1}</div>
-                  <div><div className="text-sm font-semibold text-fg">{t}</div><p className="mt-1 text-[13px] leading-relaxed text-muted">{d}</p></div>
-                </div>
-              ))}
-            </div>
-          </section>
+            {/* FULL EXAMPLE */}
+            <section>
+              <H id="example">A complete example: a leaderboard</H>
+              <P>The whole design is choosing what the key and value mean. Encode the sort field big-endian; add a writer-unique tail so two writers never collide.</P>
+              <DualCode
+                ts={<Code lang="typescript">{`import { Tree } from "torna-sdk";
 
-          {/* EXAMPLES */}
-          <section>
-            <H id="examples" kicker="Model it">Your domain as a key</H>
-            <P>The whole design is choosing what the 32-byte key and the value mean. Encode your sort field big-endian so byte order matches numeric order; add a writer-unique tail so two writers never collide.</P>
-            <div className="mt-5 space-y-2.5">
-              {[
-                ["Liquidation queue", "key = health factor (big-endian), value = position id. Keepers read the leftmost (unhealthiest) leaf; borrowers update in parallel."],
-                ["Leaderboard / top-N", "key = (MAX - score) big-endian so the best sorts first, value = player. Top-N is the first N entries; updates are concurrent."],
-                ["Order book", "key = price | slot | maker | nonce, value = maker | size. Place is an insert, cancel a delete, a partial fill an update. This is TornaDEX."],
-                ["Expiry queue", "key = deadline (big-endian), value = item id. The soonest to expire is always the leftmost leaf."],
-              ].map(([t, d]) => (
-                <div key={t} className="rounded-lg border-l-2 border-brand/50 bg-panel px-4 py-2.5">
-                  <span className="text-sm font-semibold text-fg">{t}.</span> <span className="text-[13px] text-muted">{d}</span>
-                </div>
-              ))}
-            </div>
-            <Code lang="typescript">{`// a generic sorted key: your u64 sort field big-endian, then a
-// writer-unique tail so ties never collide or serialize
-const key = new Uint8Array(32);
-new DataView(key.buffer).setBigUint64(0, sortField, false); // big-endian
-key.set(writerId.subarray(0, 16), 16);
+const MAX = 2n ** 64n - 1n;
 
-const ix = await tree.insertFastIx(reader, authority, key, value);`}</Code>
-          </section>
+// key = (MAX - score) big-endian, so the highest score sorts first
+function scoreKey(score: bigint, player: PublicKey): Uint8Array {
+  const k = new Uint8Array(32);
+  new DataView(k.buffer).setBigUint64(0, MAX - score, false); // best first
+  k.set(player.toBytes().subarray(0, 16), 16);                // unique tail
+  return k;
+}
 
-          {/* COMPARE */}
-          <section>
-            <H id="compare" kicker="The math">vs roll-your-own</H>
-            <div className="mt-5 overflow-x-auto rounded-xl border border-line">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="bg-panel-hi text-[11px] uppercase tracking-wide text-faint">
-                    <th className="px-4 py-2 text-left font-medium"></th>
-                    <th className="px-4 py-2 text-left font-medium">Hand-rolled</th>
-                    <th className="px-4 py-2 text-left font-medium text-brand">Torna</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {[
-                    ["Sorting", "you write + debug", "B+ tree, built in"],
-                    ["Parallel writes", "no, one lock", "yes, node per account"],
-                    ["Read state back", "off-chain indexer", "SDK, free, no indexer"],
-                    ["Accounts", "you manage them", "SDK hides them"],
-                    ["Correctness", "your bugs", "reviewed primitive"],
-                    ["Time to first write", "weeks", "an afternoon"],
-                  ].map((r, i) => (
-                    <tr key={r[0]} className={i % 2 ? "bg-bg-soft" : "bg-panel"}>
-                      <td className="px-4 py-2.5 font-medium text-fg">{r[0]}</td>
-                      <td className="px-4 py-2.5 text-muted">{r[1]}</td>
-                      <td className="px-4 py-2.5 text-bid">{r[2]}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </section>
+const board = new Tree(program, creator, /* treeId */ 7);
 
-          {/* COST */}
-          <section>
-            <H id="cost" kicker="Plan for it">Cost and limits</H>
-            <div className="mt-5 grid gap-4 sm:grid-cols-2">
-              <div className="rounded-xl border border-line bg-panel p-4">
-                <div className="text-sm font-semibold text-fg">What it costs</div>
-                <ul className="mt-2 space-y-1.5 text-[13px] text-muted">
-                  <li>Standing up a tree: ~<span className="nums text-fg">0.003 SOL</span> (refundable).</li>
-                  <li>A resting entry: ~<span className="nums text-fg">0.0005 SOL</span> amortized at fanout 64.</li>
-                  <li>Per write: just the ~5000-lamport network fee.</li>
-                  <li>Reads: free, they are off-chain.</li>
-                </ul>
+// submit a score (value = the player); many players write in parallel
+const ix = await board.insertFastIx(reader, authority, scoreKey(score, player), player.toBytes());
+
+// read the top 10, off-chain, no transaction
+const top10 = await board.scan(reader, 10);`}</Code>}
+                rust={<Code lang="rust">{`use torna_sdk::Tree;
+use solana_sdk::pubkey::Pubkey;
+
+// key = (u64::MAX - score) big-endian, so the highest score sorts first
+fn score_key(score: u64, player: &Pubkey) -> [u8; 32] {
+    let mut k = [0u8; 32];
+    k[0..8].copy_from_slice(&(u64::MAX - score).to_be_bytes()); // best first
+    k[16..32].copy_from_slice(&player.to_bytes()[0..16]);       // unique tail
+    k
+}
+
+let board = Tree::new(program, creator, /* tree_id */ 7);
+
+// submit a score (value = the player); many players write in parallel
+let ix = board.insert_fast_ix(&reader, authority, &score_key(score, &player), &player.to_bytes());
+
+// read the top 10, off-chain, no transaction
+let top10 = board.scan(&reader, 10);`}</Code>}
+              />
+              <P>Swap the key encoding and you have a liquidation queue (key = health), an expiry queue (key = deadline), or an order book (key = price-time). Same engine, same reads.</P>
+            </section>
+
+            {/* ERRORS */}
+            <section>
+              <H id="errors">Errors and staleness</H>
+              <P>Between resolving a path and landing, a concurrent writer may split or merge a node. The engine returns ERR_BAD_PATH; re-resolve from fresh state and retry. The SDK ships a small <span className="nums text-fg">retry</span> helper for this.</P>
+              <Code lang="text">{`102  ERR_NEED_SPLIT_SLOT   leaf is full          -> fall back to the cold insert (split)
+103  ERR_DUPLICATE_KEY     key already exists
+104  ERR_KEY_NOT_FOUND     update/delete on an absent key
+105  ERR_BAD_PATH          a concurrent split/merge moved the path -> re-resolve and retry`}</Code>
+            </section>
+
+            {/* REFERENCE */}
+            <section>
+              <H id="reference">Reference</H>
+              <div className="mt-3 grid gap-2 text-sm sm:grid-cols-2">
+                {[
+                  ["torna-sdk on npm (TypeScript)", "https://www.npmjs.com/package/torna-sdk"],
+                  ["torna-sdk on crates.io (Rust)", "https://crates.io/crates/torna-sdk"],
+                  ["torna-cpi on crates.io (on-chain)", "https://crates.io/crates/torna-cpi"],
+                  ["API docs on docs.rs", "https://docs.rs/torna-sdk"],
+                  ["The reference order book (real integration)", `${GH}/tree/main/orderbook`],
+                  ["Source on GitHub", GH],
+                ].map(([label, href]) => (
+                  <a key={label} href={href} target="_blank" rel="noreferrer" className="rounded-lg border border-line bg-panel px-4 py-2.5 text-muted transition-colors duration-100 hover:border-brand/40 hover:text-fg">{label}</a>
+                ))}
               </div>
-              <div className="rounded-xl border border-line bg-panel p-4">
-                <div className="text-sm font-semibold text-fg">Design around</div>
-                <ul className="mt-2 space-y-1.5 text-[13px] text-muted">
-                  <li>Each parallel writer funds with its own fee-payer.</li>
-                  <li>Keys are 32 bytes, big-endian; values 1 to 128 bytes.</li>
-                  <li>A serial consumer (top-of-book matching) stays serial.</li>
-                  <li>Adversarial-reviewed; external audit pending, devnet only.</li>
-                </ul>
+              <div className="mt-5 flex flex-wrap items-center gap-3 text-sm">
+                <Link href="/docs" className="inline-flex items-center gap-1.5 rounded-lg bg-brand px-4 py-2 font-medium text-onbrand transition-colors duration-100 hover:bg-brand-hi">Full docs <ArrowRight className="h-3.5 w-3.5" aria-hidden /></Link>
+                <Link href="/trade" className="inline-flex items-center gap-1.5 rounded-lg border border-line px-4 py-2 font-medium text-fg transition-colors duration-100 hover:bg-panel-hi">See it trade live</Link>
+                <a href={GH} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 rounded-lg border border-line px-4 py-2 font-medium text-fg transition-colors duration-100 hover:bg-panel-hi"><GithubIcon className="h-3.5 w-3.5" /> GitHub</a>
               </div>
-            </div>
-          </section>
-
-          {/* CTA */}
-          <section className="glass neon-glow relative overflow-hidden rounded-2xl px-6 py-8">
-            <div className="brand-gradient pointer-events-none absolute -right-20 -top-20 h-52 w-52 rounded-full opacity-25 blur-3xl" aria-hidden />
-            <h2 className="display relative text-xl font-semibold tracking-tight text-fg sm:text-2xl">Start with a key and a value</h2>
-            <p className="relative mt-2 text-sm leading-relaxed text-muted">The SDK is on npm and crates.io, and the engine is live on devnet.</p>
-            <div className="relative mt-5 flex flex-wrap items-center gap-2.5 text-sm">
-              <Link href="/docs" className="inline-flex items-center gap-1.5 rounded-lg bg-brand px-4 py-2 font-medium text-onbrand transition-colors duration-100 hover:bg-brand-hi">Read the docs <ArrowRight className="h-3.5 w-3.5" aria-hidden /></Link>
-              <Link href="/trade" className="inline-flex items-center gap-1.5 rounded-lg border border-line px-4 py-2 font-medium text-fg transition-colors duration-100 hover:bg-panel-hi">See TornaDEX live</Link>
-            </div>
-          </section>
-        </div>
-      </article>
+            </section>
+          </div>
+        </article>
+      </LangProvider>
     </div>
   );
 }
