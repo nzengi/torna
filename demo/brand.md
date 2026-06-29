@@ -11,8 +11,8 @@ adjectives.
 
 ## Aesthetic
 
-Warm editorial LIGHT theme on cream. High-contrast ink for readability (AA+). Generous whitespace,
-hairline warm borders, one violet accent. A characterful display serif (Fraunces) for headings, Geist
+Ritual-inspired dark + neon: black ground, neon green/pink/blue accents, ClashGrotesk type, glass cards, gradient text, soft glow. White text stays high-contrast and readable. High-contrast ink for readability (AA+). Generous whitespace,
+hairline warm borders, one vivid neon green accent. A characterful display serif (Fraunces) for headings, Geist
 sans for UI, Geist Mono for all numbers/addresses/code. Diagrams are crisp SVG/CSS, not raster. Motion
 only where it teaches; respect reduced-motion.
 
@@ -20,28 +20,28 @@ only where it teaches; respect reduced-motion.
 
 | token     | hex      | use                                            |
 |-----------|----------|------------------------------------------------|
-| bg        | #f7f3ea  | cream page background                           |
-| bg-soft   | #fcfaf4  | lighter section band                            |
-| panel     | #ffffff  | cards, the order ladder, code panels            |
-| panel-hi  | #f1ebdd  | row hover, active nav, elevated                  |
-| line      | #e7dece  | borders, dividers                              |
-| ink (fg)  | #1c1814  | primary text (~13:1 on cream)                   |
-| muted     | #5c5346  | secondary text (~6:1)                           |
-| faint     | #8a7e6d  | captions / tertiary (large or secondary only)   |
-| brand     | #6d28d9  | accent, interactive, AND "parallel" (violet-700)|
-| brand-hi  | #5b21b6  | hover / active                                  |
+| bg        | #000000  | page ground (black)                           |
+| bg-soft   | #07070b  | section band                            |
+| panel     | #ffffff  | cards, the order book, code panels            |
+| panel-hi  | #12121a  | row hover, active nav, elevated                  |
+| line      | #1d1d27  | borders, dividers                              |
+| ink (fg)  | #ffffff  | primary text (white, high contrast)                   |
+| muted     | #a2a2af  | secondary text (~6:1)                           |
+| faint     | #6a6a78  | captions / tertiary (large or secondary only)   |
+| brand     | #00ff88  | accent, interactive, AND "parallel" (neon green)|
+| brand-hi  | #00cc6a  | hover / active                                  |
 | onbrand   | #ffffff  | text on brand fills                             |
-| bid       | #15803d  | buy side / positive (green-700)                 |
-| ask       | #dc2626  | sell side / negative (red-600)                  |
+| bid       | #00ff88  | buy side / positive (green-700)                 |
+| ask       | #ff2d8e  | sell side / negative (red-600)                  |
 | serial    | #b45309  | serialized / warning / devnet chip (amber-700)  |
 
-Semantic discipline: trading sides use green (bid) / red (ask); the parallelism viz uses violet
-(parallel) / amber (serial). Violet doubles as the brand/interactive accent. Colors are 600–700 weight
-so they keep contrast on cream — do not use bright pastels on this background.
+Semantic discipline: trading sides use green (bid) / red (ask); the parallelism viz uses neon green
+(parallel) / amber (serial). Neon green doubles as the brand/interactive accent. Text colors are deep for high contrast on the light page;
+the accent is vivid for energy.
 
 ## Typography
 
-- Display: Fraunces (`.display`) for hero + section headings. UI: Geist. Numbers/addresses/code: Geist
+- Display: ClashGrotesk (`.display`) for hero + section headings. UI: Geist. Numbers/addresses/code: Geist
   Mono via `.nums` (tabular-nums).
 - Addresses: mono, truncated 4…4, click-to-copy, separate explorer link.
 

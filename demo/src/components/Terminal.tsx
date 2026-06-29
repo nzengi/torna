@@ -19,6 +19,8 @@ import { Trade } from "./Trade";
 const amount = (d: Uint8Array | null) =>
   d && d.length >= 72 ? new DataView(d.buffer, d.byteOffset, d.byteLength).getBigUint64(64, true) : 0n;
 
+const TRADER_COLORS = ["#635bff", "#16a34a", "#d97706", "#df1b41"];
+
 export function Terminal() {
   const book = useBook();
   const wallet = useWallet();
@@ -108,7 +110,7 @@ export function Terminal() {
       <div className="flex flex-wrap items-center gap-x-8 gap-y-3 rounded-xl border border-line bg-panel px-5 py-3.5">
         <div className="flex items-baseline gap-2">
           <span className="text-base font-semibold tracking-tight">BASE / QUOTE</span>
-          <span className="rounded bg-panel-hi px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-faint">devnet</span>
+          <span className="rounded bg-panel-hi px-1.5 py-0.5 text-[11px] uppercase tracking-wide text-faint">devnet</span>
         </div>
         <Quote label="Best bid" value={bestBid} cls="text-bid" />
         <Quote label="Mid" value={mid} cls="text-fg" />
@@ -119,66 +121,80 @@ export function Terminal() {
 
       {/* account bar */}
       <div className="rounded-xl border border-line bg-panel p-4">
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="flex rounded-lg border border-line p-0.5 text-sm">
-            {(["wallet", "demo"] as const).map((m) => (
-              <button
-                key={m}
-                onClick={() => setMode(m)}
-                className={`rounded-md px-3 py-1 transition-colors duration-100 ${mode === m ? "bg-panel-hi font-medium text-fg" : "text-muted hover:text-fg"}`}
-              >
-                {m === "wallet" ? "My wallet" : "Demo identity"}
-              </button>
-            ))}
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          {/* identity */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-3">
+              <span className="text-[11px] font-semibold uppercase tracking-wide text-faint">Trading as</span>
+              <div className="flex rounded-lg border border-line p-0.5 text-xs">
+                {(["wallet", "demo"] as const).map((m) => (
+                  <button
+                    key={m}
+                    onClick={() => setMode(m)}
+                    className={`rounded-md px-3 py-1 transition-colors duration-100 ${mode === m ? "bg-panel-hi font-medium text-fg" : "text-muted hover:text-fg"}`}
+                  >
+                    {m === "wallet" ? "My wallet" : "Demo trader"}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {mode === "demo" ? (
+              <div className="flex flex-wrap gap-2">
+                {MARKET.demos.map((d, i) => (
+                  <button
+                    key={d.pubkey}
+                    onClick={() => setIdIdx(i)}
+                    className={`flex items-center gap-2.5 rounded-lg border px-3 py-2 transition-colors duration-100 active:translate-y-px ${i === idIdx ? "border-brand bg-brand/5" : "border-line hover:border-muted"}`}
+                  >
+                    <span className="flex h-7 w-7 items-center justify-center rounded-full text-[11px] font-semibold text-white" style={{ background: TRADER_COLORS[i % 4] }}>
+                      {i + 1}
+                    </span>
+                    <span className="text-left leading-tight">
+                      <span className="block text-sm font-medium text-fg">Trader {i + 1}</span>
+                      <span className="nums block text-[11px] text-faint">{shorten(d.pubkey)}</span>
+                    </span>
+                  </button>
+                ))}
+              </div>
+            ) : connected ? (
+              <div className="flex flex-wrap items-center gap-3">
+                <span className="flex items-center gap-2 rounded-lg border border-line px-3 py-2 text-sm">
+                  <span className="flex h-7 w-7 items-center justify-center rounded-full bg-brand/10"><Wallet className="h-3.5 w-3.5 text-brand" aria-hidden /></span>
+                  <span className="leading-tight">
+                    <span className="block font-medium text-fg">Your wallet</span>
+                    <span className="nums block text-[11px] text-faint">{shorten(wallet.publicKey!.toBase58())}</span>
+                  </span>
+                </span>
+                <button onClick={doFaucet} disabled={faucetBusy} className="inline-flex items-center gap-1.5 rounded-lg border border-brand/40 bg-brand/5 px-3 py-2 text-sm font-medium text-brand transition-colors duration-100 hover:bg-brand/10 active:translate-y-px disabled:pointer-events-none disabled:opacity-50">
+                  <Droplets className="h-4 w-4" aria-hidden /> {faucetBusy ? "Sending demo tokens" : "Get demo tokens"}
+                </button>
+              </div>
+            ) : (
+              <div className="flex flex-wrap items-center gap-3">
+                <button onClick={() => modal.setVisible(true)} className="inline-flex items-center gap-2 rounded-lg bg-brand px-4 py-2 text-sm font-medium text-onbrand transition-colors duration-100 hover:bg-brand-hi active:translate-y-px">
+                  <Wallet className="h-4 w-4" aria-hidden /> Connect wallet
+                </button>
+                <span className="text-xs text-faint">Phantom or Solflare on devnet, then grab demo tokens.</span>
+              </div>
+            )}
           </div>
 
-          {mode === "wallet" ? (
-            connected ? (
-              <>
-                <span className="nums flex items-center gap-1.5 text-sm text-fg">
-                  <Wallet className="h-4 w-4 text-brand" aria-hidden /> {shorten(wallet.publicKey!.toBase58())}
-                </span>
-                <button onClick={doFaucet} disabled={faucetBusy} className="inline-flex items-center gap-1.5 rounded-lg border border-brand/40 bg-brand/5 px-3 py-1.5 text-sm text-brand transition-colors duration-100 hover:bg-brand/10 active:translate-y-px disabled:pointer-events-none disabled:opacity-50">
-                  <Droplets className="h-4 w-4" aria-hidden /> {faucetBusy ? "Requesting" : "Get demo tokens"}
-                </button>
-              </>
-            ) : (
-              <button onClick={() => modal.setVisible(true)} className="inline-flex items-center gap-2 rounded-lg bg-brand px-4 py-1.5 text-sm font-medium text-onbrand transition-colors duration-100 hover:bg-brand-hi active:translate-y-px">
-                <Wallet className="h-4 w-4" aria-hidden /> Connect wallet
-              </button>
-            )
-          ) : (
-            <div className="flex flex-wrap gap-1.5">
-              {MARKET.demos.map((d, i) => (
-                <button
-                  key={d.pubkey}
-                  onClick={() => setIdIdx(i)}
-                  className={`nums rounded border px-2.5 py-1 text-xs transition-colors duration-100 active:translate-y-px ${i === idIdx ? "border-brand text-brand" : "border-line text-muted hover:border-muted"}`}
-                >
-                  demo{i} {shorten(d.pubkey)}
-                </button>
-              ))}
+          {/* balances of the acting account */}
+          <div>
+            <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-faint">Balances</div>
+            <div className="flex gap-2">
+              <BalCard label="Base" value={bal ? bal.base.toLocaleString() : "-"} />
+              <BalCard label="Quote" value={bal ? bal.quote.toLocaleString() : "-"} />
+              <BalCard label="SOL" value={bal ? bal.sol.toFixed(3) : "-"} />
             </div>
-          )}
-
-          {/* live balances of the acting account */}
-          {bal && (
-            <div className="nums ml-auto flex items-center gap-4 text-sm">
-              <Bal label="base" value={bal.base.toString()} />
-              <Bal label="quote" value={bal.quote.toString()} />
-              <Bal label="SOL" value={bal.sol.toFixed(3)} />
-            </div>
-          )}
+          </div>
         </div>
-        {mode === "wallet" && !connected && (
-          <p className="mt-2 text-xs text-faint">
-            Connect Phantom or Solflare on devnet, grab demo tokens from the faucet, then trade with your own wallet.
-          </p>
-        )}
+
         {msg && (
-          <p className="mt-2 text-xs text-muted">
+          <p className="mt-3 border-t border-line pt-3 text-xs text-muted">
             {msg.text}
-            {msg.sig && <> · <a className="text-brand underline hover:text-brand-hi" href={explorerTx(msg.sig)} target="_blank" rel="noreferrer">view tx</a></>}
+            {msg.sig && <> · <a className="text-brand underline hover:text-brand-hi" href={explorerTx(msg.sig)} target="_blank" rel="noreferrer">view transaction</a></>}
           </p>
         )}
       </div>
@@ -213,17 +229,17 @@ export function Terminal() {
 function Quote({ label, value, cls }: { label: string; value: bigint | undefined; cls: string }) {
   return (
     <div>
-      <div className="text-[10px] uppercase tracking-wide text-faint">{label}</div>
+      <div className="text-[11px] uppercase tracking-wide text-faint">{label}</div>
       <div className={`nums text-sm font-semibold ${cls}`}>{value !== undefined ? value.toString() : "-"}</div>
     </div>
   );
 }
 
-function Bal({ label, value }: { label: string; value: string }) {
+function BalCard({ label, value }: { label: string; value: string }) {
   return (
-    <span className="flex items-baseline gap-1">
-      <span className="text-fg">{value}</span>
-      <span className="text-[10px] uppercase tracking-wide text-faint">{label}</span>
-    </span>
+    <div className="min-w-[5.5rem] rounded-lg border border-line bg-bg-soft px-3 py-2 text-center">
+      <div className="nums text-base font-semibold text-fg">{value}</div>
+      <div className="text-[11px] uppercase tracking-wide text-faint">{label}</div>
+    </div>
   );
 }

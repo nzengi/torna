@@ -15,7 +15,7 @@ function Scenario({ kind, title, subtitle }: { kind: "parallel" | "serial"; titl
       <div className="flex flex-col gap-1.5">
         {Array.from({ length: slots }).map((_, s) => (
           <div key={s} className="flex items-center gap-2">
-            <span className="nums w-12 shrink-0 text-[10px] text-faint">slot {s + 1}</span>
+            <span className="nums w-12 shrink-0 text-[11px] text-faint">slot {s + 1}</span>
             <div className="flex flex-1 gap-1">
               {Array.from({ length: kind === "parallel" ? 6 : 1 }).map((_, b) => (
                 <div key={b} className={`h-6 flex-1 rounded ${color} opacity-85`} />
@@ -50,16 +50,16 @@ export function Parallelism() {
           <Scenario kind="serial" title="All at one price" subtitle="same leaf → serialized" />
         </div>
 
-        <div className="mt-6 flex flex-wrap items-center gap-x-8 gap-y-3 rounded-xl border border-line bg-panel p-6">
+        <div className="glass neon-glow mt-6 flex flex-wrap items-center gap-x-8 gap-y-3 rounded-xl p-6">
           <div className="flex items-baseline gap-2">
-            <span className="nums display text-4xl font-semibold text-brand">3.4–6×</span>
+            <span className="nums display text-gradient text-4xl font-semibold">3.4-6x</span>
             <span className="text-sm text-muted">more committed tx / slot<br />disjoint vs. same-leaf</span>
           </div>
           <p className="max-w-xl flex-1 text-xs leading-relaxed text-faint">
             Measured on a single-node solana-test-validator, the real Agave banking stage, via
-            <span className="text-muted"> torna/bench</span>. Devnet is shared and noisy, so the
+            <span className="font-medium text-fg"> torna/bench</span>. Devnet is shared and noisy, so the
             controlled number is the honest one. This parallelizes book{" "}
-            <span className="font-medium text-fg">maintenance</span>, not matching: top-of-book is
+            <span className="font-semibold text-fg">maintenance</span>, not matching: top-of-book is
             price-time serial by definition, and nothing can change that.
           </p>
         </div>

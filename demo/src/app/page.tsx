@@ -10,12 +10,14 @@ export default function Home() {
   return (
     <>
       {/* Hero */}
-      <section className="mx-auto max-w-6xl px-6 pt-20 pb-16">
+      <section className="relative overflow-hidden">
+        <div className="hero-glow pointer-events-none absolute inset-0 -z-10" aria-hidden />
+        <div className="mx-auto max-w-6xl px-6 pt-20 pb-16">
         <p className="enter mb-4 text-xs font-semibold uppercase tracking-[0.2em] text-brand">
           Sorted on-chain state, without the slab
         </p>
         <h1 className="enter display max-w-3xl text-5xl font-semibold leading-[1.05] tracking-tight sm:text-6xl" style={{ animationDelay: "70ms" }}>
-          A parallel, ordered order book, fully on Solana.
+          A parallel, ordered <span className="text-gradient">order book</span>, fully on Solana.
         </h1>
         <p className="enter mt-6 max-w-2xl text-lg leading-relaxed text-muted" style={{ animationDelay: "140ms" }}>
           TornaDEX is a central limit order book built on <span className="font-medium text-fg">Torna</span>,
@@ -33,6 +35,7 @@ export default function Home() {
           <code className="nums rounded-lg border border-line bg-panel px-3 py-2 text-xs text-muted">npm i torna-sdk</code>
         </div>
         <p className="mt-4 text-xs text-faint">Live on devnet · in-house adversarial-reviewed · external audit pending.</p>
+        </div>
       </section>
 
       {/* The problem */}
@@ -111,6 +114,29 @@ export default function Home() {
             <Link href="/explorer" className="inline-flex items-center gap-2 rounded-lg border border-line bg-panel px-5 py-2.5 text-sm font-medium text-fg transition-colors duration-100 hover:border-muted active:translate-y-px">
               Inspect the on-chain tree
             </Link>
+          </div>
+        </div>
+      </section>
+
+      {/* CTA band */}
+      <section className="mx-auto max-w-6xl px-6 py-16">
+        <div className="glass neon-glow relative overflow-hidden rounded-2xl px-8 py-12 sm:px-12">
+          <div className="brand-gradient pointer-events-none absolute -right-24 -top-24 h-64 w-64 rounded-full opacity-25 blur-3xl" aria-hidden />
+          <h2 className="display relative text-3xl font-semibold tracking-tight text-fg sm:text-4xl">
+            Build on <span className="text-gradient">Torna</span>
+          </h2>
+          <p className="relative mt-3 max-w-xl text-[15px] leading-relaxed text-muted">
+            The engine is deployed and the SDK is on npm. Resolve accounts off-chain and ship a parallel,
+            ordered, sorted index without the slab or an indexer.
+          </p>
+          <div className="relative mt-7 flex flex-wrap items-center gap-3">
+            <Link href="/trade" className="inline-flex items-center gap-2 rounded-lg bg-brand px-5 py-2.5 text-sm font-medium text-onbrand transition-colors duration-100 hover:bg-brand-hi active:translate-y-px">
+              Try the live demo <ArrowRight className="h-4 w-4" aria-hidden />
+            </Link>
+            <Link href="/docs" className="inline-flex items-center gap-2 rounded-lg border border-line px-5 py-2.5 text-sm font-medium text-fg transition-colors duration-100 hover:bg-panel-hi active:translate-y-px">
+              Read the docs
+            </Link>
+            <code className="nums rounded-lg border border-line bg-panel-hi px-3 py-2 text-xs text-muted">npm i torna-sdk</code>
           </div>
         </div>
       </section>

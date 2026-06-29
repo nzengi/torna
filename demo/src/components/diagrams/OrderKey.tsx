@@ -16,7 +16,7 @@ export function OrderKey() {
             className={`flex flex-col gap-0.5 px-3 py-2.5 ${i > 0 ? "border-l border-line" : ""} ${i % 2 ? "bg-bg-soft" : "bg-panel"}`}
             style={{ width: `${s.w}%` }}
           >
-            <span className="nums text-[10px] text-faint">bytes {s.bytes}</span>
+            <span className="nums text-[11px] text-faint">bytes {s.bytes}</span>
             <span className="text-sm font-medium text-fg">{s.label}</span>
             <span className="text-[11px] leading-tight text-muted">{s.note}</span>
           </div>
