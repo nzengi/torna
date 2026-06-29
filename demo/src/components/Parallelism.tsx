@@ -41,7 +41,7 @@ export function Parallelism() {
         </h2>
         <p className="mt-4 max-w-2xl text-[15px] leading-relaxed text-muted">
           Six makers, identical compute. Quoting across different price levels puts each order in a
-          different leaf — a different account — so the Solana scheduler commits them in one slot.
+          different leaf, a different account, so the Solana scheduler commits them in one slot.
           All at the same price means one shared leaf, so they serialize across six slots.
         </p>
 
@@ -56,7 +56,7 @@ export function Parallelism() {
             <span className="text-sm text-muted">more committed tx / slot<br />disjoint vs. same-leaf</span>
           </div>
           <p className="max-w-xl flex-1 text-xs leading-relaxed text-faint">
-            Measured on a single-node solana-test-validator — the real Agave banking stage — via
+            Measured on a single-node solana-test-validator, the real Agave banking stage, via
             <span className="text-muted"> torna/bench</span>. Devnet is shared and noisy, so the
             controlled number is the honest one. This parallelizes book{" "}
             <span className="font-medium text-fg">maintenance</span>, not matching: top-of-book is

@@ -108,11 +108,11 @@ export function OrderBook({
           </div>
 
           <div className="flex items-center justify-between border-y border-line bg-panel-hi px-4 py-2 text-sm">
-            <span className={`nums text-bid ${bidFlash}`}>{bestBid?.toString() ?? "—"}</span>
+            <span className={`nums text-bid ${bidFlash}`}>{bestBid?.toString() ?? "-"}</span>
             <span className="text-xs text-faint">
-              spread {spread !== undefined ? <span className="nums text-muted">{spread.toString()}</span> : "—"}
+              spread {spread !== undefined ? <span className="nums text-muted">{spread.toString()}</span> : "-"}
             </span>
-            <span className={`nums text-ask ${askFlash}`}>{bestAsk?.toString() ?? "—"}</span>
+            <span className={`nums text-ask ${askFlash}`}>{bestAsk?.toString() ?? "-"}</span>
           </div>
 
           <div>
@@ -122,7 +122,7 @@ export function OrderBook({
           </div>
 
           {asks.length === 0 && bids.length === 0 && (
-            <div className="px-4 py-6 text-center text-sm text-faint">Book empty — place the first order.</div>
+            <div className="px-4 py-6 text-center text-sm text-faint">Book empty, place the first order.</div>
           )}
         </>
       )}

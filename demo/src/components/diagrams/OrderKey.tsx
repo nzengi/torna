@@ -23,7 +23,7 @@ export function OrderKey() {
         ))}
       </div>
       <p className="mt-2 text-xs text-faint">
-        Compared byte-by-byte, this single key sorts the whole book into price-then-time priority —
+        Compared byte-by-byte, this single key sorts the whole book into price-then-time priority,
         the tree stays sorted with no extra index.
       </p>
     </div>

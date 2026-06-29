@@ -50,7 +50,7 @@ export default function DocsPage() {
         <p className="text-xs font-semibold uppercase tracking-[0.2em] text-brand">Documentation</p>
         <h1 className="display mt-2 text-4xl font-semibold tracking-tight">Torna, explained from scratch</h1>
         <P>
-          Torna is the first parallel, ordered, on-chain index primitive for Solana — a sorted
+          Torna is the first parallel, ordered, on-chain index primitive for Solana, a sorted
           key→value store you use like a local map. TornaDEX is the reference order book built on it.
           This page assumes no prior knowledge.
         </P>
@@ -61,7 +61,7 @@ export default function DocsPage() {
             <P>
               An order book needs two things: keep orders <em>sorted</em> (best price first), and let
               many traders update it <em>at once</em>. On Solana both are hard. Torna solves them with a
-              B+ tree — a balanced sorted tree — where <strong className="text-fg">every node is its own
+              B+ tree, a balanced sorted tree, where <strong className="text-fg">every node is its own
               account</strong>. Sorting comes from the tree; parallelism comes from the one-account-per-node
               layout. Torna is a generic sorted index, not a matching engine; the order book program sits
               on top.
@@ -72,9 +72,9 @@ export default function DocsPage() {
             <H id="resources">The three scarce resources</H>
             <P>Every Solana program is bound by three limits. Torna’s layout is chosen to win all three:</P>
             <ul className="mt-4 space-y-2 text-[15px] text-muted">
-              <li><strong className="text-fg">Account budget</strong> — a transaction can only reference so many accounts. High tree fanout keeps height ~3, so an operation touches ~3 node accounts.</li>
-              <li><strong className="text-fg">Account-lock parallelism</strong> — Sealevel runs transactions together when their writable accounts don’t overlap. One node per account makes disjoint-key writes disjoint.</li>
-              <li><strong className="text-fg">Rent</strong> — every account costs a rent deposit. Node size scales with the value, and high fanout amortizes the per-account overhead.</li>
+              <li><strong className="text-fg">Account budget</strong>, a transaction can only reference so many accounts. High tree fanout keeps height ~3, so an operation touches ~3 node accounts.</li>
+              <li><strong className="text-fg">Account-lock parallelism</strong>, Sealevel runs transactions together when their writable accounts don’t overlap. One node per account makes disjoint-key writes disjoint.</li>
+              <li><strong className="text-fg">Rent</strong>, every account costs a rent deposit. Node size scales with the value, and high fanout amortizes the per-account overhead.</li>
             </ul>
             <P>A textbook single-account slab order book fails all three: it loads the whole book per tx, serializes every write behind one lock, and wastes space.</P>
           </section>
@@ -95,7 +95,7 @@ export default function DocsPage() {
             <P>
               Most operations are <strong className="text-fg">hot</strong>: insert/update/delete into an
               existing leaf. The header stays read-only, no new accounts are created, only the target leaf
-              is writable — fully parallel. Occasionally a leaf fills and must split (insert) or empties and
+              is writable, fully parallel. Occasionally a leaf fills and must split (insert) or empties and
               must merge (delete): the <strong className="text-fg">cold path</strong> touches an allocator
               and creates/closes node accounts. Keeper bots run splits/compaction off-peak so the hot path
               stays split-free.
@@ -106,7 +106,7 @@ export default function DocsPage() {
             <H id="key">The order key</H>
             <P>
               Keys are compared byte-by-byte. Encoding the order as a single 32-byte big-endian key makes
-              that byte order equal price-time priority — so the tree <em>is</em> the sorted book, with no
+              that byte order equal price-time priority, so the tree <em>is</em> the sorted book, with no
               secondary index.
             </P>
             <div className="mt-5"><OrderKey /></div>
@@ -137,7 +137,7 @@ export default function DocsPage() {
             <H id="sdk">The SDK</H>
             <P>
               The client is the product. You call with a key and value; the planner reads the tree
-              off-chain and returns the exact accounts — node indices, PDA bumps, descent paths, and split
+              off-chain and returns the exact accounts, node indices, PDA bumps, descent paths, and split
               spares never leak out. Published as <code className="nums rounded bg-panel-hi px-1.5 py-0.5 text-[13px]">torna-sdk</code> on npm.
             </P>
             <Code>{`import { Tree, keys } from "torna-sdk";

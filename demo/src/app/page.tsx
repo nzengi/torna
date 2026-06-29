@@ -15,12 +15,12 @@ export default function Home() {
           Sorted on-chain state, without the slab
         </p>
         <h1 className="enter display max-w-3xl text-5xl font-semibold leading-[1.05] tracking-tight sm:text-6xl" style={{ animationDelay: "70ms" }}>
-          A parallel, ordered order book — fully on Solana.
+          A parallel, ordered order book, fully on Solana.
         </h1>
         <p className="enter mt-6 max-w-2xl text-lg leading-relaxed text-muted" style={{ animationDelay: "140ms" }}>
           TornaDEX is a central limit order book built on <span className="font-medium text-fg">Torna</span>,
           a B+ tree index where every node lives in its own account. Makers quoting at different prices
-          write to different accounts, so the Solana scheduler runs their orders in parallel — no slab,
+          write to different accounts, so the Solana scheduler runs their orders in parallel, no slab,
           no off-chain indexer.
         </p>
         <div className="enter mt-8 flex flex-wrap items-center gap-3" style={{ animationDelay: "210ms" }}>

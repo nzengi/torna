@@ -23,7 +23,7 @@ export const runtime = "nodejs";
 
 const BASE_AMT = 1000n;
 const QUOTE_AMT = 1_000_000n;
-const SOL_LAMPORTS = 20_000_000;          // 0.02 SOL — enough for many devnet tx fees
+const SOL_LAMPORTS = 20_000_000;          // 0.02 SOL, enough for many devnet tx fees
 const ATA_RENT = 2_040_000;               // ~rent per token account the faucet creates
 const CALL_COST = SOL_LAMPORTS + 2 * ATA_RENT + 10_000; // true per-call cost (incl. rent + fee)
 const RESERVE_LAMPORTS = 200_000_000;     // never dispense below 0.2 SOL
@@ -40,7 +40,7 @@ function faucetKey(): Keypair {
   return Keypair.fromSecretKey(Uint8Array.from(raw));
 }
 
-// in-memory limiters (per process — see header note)
+// in-memory limiters (per process, see header note)
 const destSeen = new Map<string, number>();
 const ipSeen = new Map<string, number>();
 let globalHits: { t: number }[] = [];
@@ -109,7 +109,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "faucet temporarily out of funds" }, { status: 503 });
     }
 
-    // ONE atomic tx: create ATAs (idempotent) + mint both + transfer SOL — all-or-nothing
+    // ONE atomic tx: create ATAs (idempotent) + mint both + transfer SOL, all-or-nothing
     const tx = new Transaction().add(
       createAssociatedTokenAccountIdempotentInstruction(faucet.publicKey, baseAta, dest, baseMint),
       createAssociatedTokenAccountIdempotentInstruction(faucet.publicKey, quoteAta, dest, quoteMint),

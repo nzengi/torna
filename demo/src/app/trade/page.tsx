@@ -8,7 +8,7 @@ export default function TradePage() {
       <div className="mb-6">
         <h1 className="display text-3xl font-semibold tracking-tight">Live order book</h1>
         <p className="mt-2 max-w-2xl text-sm leading-relaxed text-muted">
-          Read straight from the on-chain B+ tree via the SDK — no indexer. Place, take, and cancel as
+          Read straight from the on-chain B+ tree via the SDK, no indexer. Place, take, and cancel as
           one of four pre-funded devnet identities; every action is a real transaction with an explorer
           link. The book refreshes automatically.
         </p>

@@ -28,7 +28,7 @@ export function MarketInfo() {
         <Addr label="quote vault (escrow)" addr={MARKET.quoteVault} />
       </div>
       <div className="border-t border-line px-4 py-2 text-xs text-faint">
-        Two trees (ask + bid), two vaults, one config — all owned by the book PDA. Bids and asks
+        Two trees (ask + bid), two vaults, one config, all owned by the book PDA. Bids and asks
         never share a writable account.
       </div>
     </div>

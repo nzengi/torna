@@ -10,7 +10,7 @@ const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"]
 const fraunces = Fraunces({ variable: "--font-fraunces", subsets: ["latin"], weight: ["400", "500", "600"] });
 
 export const metadata: Metadata = {
-  title: "TornaDEX — a parallel on-chain order book on Solana",
+  title: "TornaDEX, a parallel on-chain order book on Solana",
   description:
     "TornaDEX is a central limit order book built on Torna: a parallel, ordered, on-chain B+ tree index where every node is its own account, so makers quoting at different prices write in parallel.",
 };

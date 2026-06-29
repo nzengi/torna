@@ -11,7 +11,7 @@ export function Footer() {
           <span className="flex items-center gap-1.5 text-muted">market <Address value={MARKET.cfg} /></span>
         </div>
         <p className="max-w-md leading-relaxed">
-          In-house adversarial review to convergence (engine, orderbook, SDK). External audit pending —
+          In-house adversarial review to convergence (engine, orderbook, SDK). External audit pending,
           do not treat as production-audited. Devnet only.
         </p>
       </div>

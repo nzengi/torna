@@ -1,7 +1,7 @@
 export function Hero() {
   return (
     <section className="mx-auto max-w-6xl px-6 pt-16 pb-10">
-      <p className="mb-3 text-xs uppercase tracking-[0.2em] text-brand">Torna — sorted on-chain state, without the slab</p>
+      <p className="mb-3 text-xs uppercase tracking-[0.2em] text-brand">Torna, sorted on-chain state, without the slab</p>
       <h1 className="max-w-3xl text-4xl font-semibold leading-tight tracking-tight sm:text-5xl">
         A parallel, ordered, on-chain order book on Solana.
       </h1>
@@ -12,7 +12,7 @@ export function Hero() {
       </p>
       <p className="mt-3 max-w-2xl text-sm leading-relaxed text-faint">
         Honest scope: Torna parallelizes book <span className="text-fg">maintenance</span> (maker
-        place/cancel across prices), not matching — top-of-book is price-time serial and nothing can
+        place/cancel across prices), not matching, top-of-book is price-time serial and nothing can
         change that. In a maker-heavy book, maintenance traffic dominates.
       </p>
     </section>
