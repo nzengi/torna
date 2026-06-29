@@ -12,9 +12,10 @@ export function Parallelism() {
           Why the writes run in parallel
         </h2>
         <p className="mt-4 max-w-2xl text-[15px] leading-relaxed text-muted">
-          The usual on-chain book is one big account, so every order hits the same account and they
-          serialize, one per slot. Torna puts each B+ tree node in its own account, so orders at different
-          prices touch different accounts and Solana commits them in the same slot.
+          The usual on-chain book keeps each side in one slab account, so every order on a side takes the
+          same write lock and serializes, one per slot. Torna puts each B+ tree node in its own account, so
+          orders that fall in different leaves touch different accounts and Solana commits them in the same
+          slot. A deep book spreads its price levels across many leaves.
         </p>
 
         <figure className="mt-8">
@@ -22,15 +23,17 @@ export function Parallelism() {
             <Mechanism />
           </div>
           <figcaption className="mt-3 text-center text-xs leading-relaxed text-faint">
-            Same three makers at 100, 105 and 110 on both sides. Left, one shared account serializes them
-            across three slots. Right, Torna gives each node its own account, so they commit in one slot.
+            Three makers whose prices fall in different leaves. Left, the side's one slab serializes them
+            across three slots; right, Torna gives each leaf its own account, so they commit in one slot.
+            Adjacent prices in a sparse book share a leaf and still serialize, and matching itself is always
+            serial.
           </figcaption>
         </figure>
 
         <div className="glass neon-glow mt-6 flex flex-wrap items-center gap-x-8 gap-y-3 rounded-xl p-6">
           <div className="flex items-baseline gap-2">
             <span className="nums display text-gradient text-4xl font-semibold">4.6-7.1x</span>
-            <span className="text-sm text-muted">more committed tx/slot when makers<br />quote across prices vs. all at one price</span>
+            <span className="text-sm text-muted">more committed tx/slot when maker writes<br />land in different leaves vs. one shared leaf</span>
           </div>
           <p className="max-w-xl flex-1 text-xs leading-relaxed text-faint">
             Measured on a single-node solana-test-validator, the real Agave banking stage, via

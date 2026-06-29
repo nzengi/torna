@@ -67,7 +67,7 @@ export function Trade({ actor, book, onDone }: { actor: Actor | null; book: { as
     <div className="rounded-xl border border-line bg-panel">
       <div className="flex border-b border-line text-sm">
         {(["place", "take"] as const).map((t) => (
-          <button key={t} onClick={() => setTab(t)} className={`flex-1 py-2.5 transition-colors duration-100 ${tab === t ? "border-b-2 border-brand font-medium text-fg" : "text-faint hover:text-muted"}`}>
+          <button key={t} onClick={() => setTab(t)} aria-pressed={tab === t} className={`flex-1 py-2.5 transition-colors duration-100 ${tab === t ? "border-b-2 border-brand font-medium text-fg" : "text-faint hover:text-muted"}`}>
             {t === "place" ? "Place (maker)" : "Take (taker)"}
           </button>
         ))}
@@ -75,10 +75,10 @@ export function Trade({ actor, book, onDone }: { actor: Actor | null; book: { as
 
       <div className="space-y-3 px-4 py-4">
         <div className="flex gap-2">
-          <button onClick={() => setDir("sell")} className={`flex-1 rounded-lg border py-2 text-sm transition-colors duration-100 active:translate-y-px ${dir === "sell" ? "border-ask text-ask" : "border-line text-muted hover:border-muted"}`}>
+          <button onClick={() => setDir("sell")} aria-pressed={dir === "sell"} className={`flex-1 rounded-lg border py-2 text-sm transition-colors duration-100 active:translate-y-px ${dir === "sell" ? "border-ask text-ask" : "border-line text-muted hover:border-muted"}`}>
             Sell
           </button>
-          <button onClick={() => setDir("buy")} className={`flex-1 rounded-lg border py-2 text-sm transition-colors duration-100 active:translate-y-px ${dir === "buy" ? "border-bid text-bid" : "border-line text-muted hover:border-muted"}`}>
+          <button onClick={() => setDir("buy")} aria-pressed={dir === "buy"} className={`flex-1 rounded-lg border py-2 text-sm transition-colors duration-100 active:translate-y-px ${dir === "buy" ? "border-bid text-bid" : "border-line text-muted hover:border-muted"}`}>
             Buy
           </button>
         </div>
@@ -91,12 +91,12 @@ export function Trade({ actor, book, onDone }: { actor: Actor | null; book: { as
             <span className="text-[11px] uppercase tracking-wide text-faint">{tab === "place" ? "price" : "limit price"}</span>
             <span className="flex gap-1.5 text-[11px]">
               {bestBid !== undefined && (
-                <button type="button" onClick={() => setPrice(bestBid.toString())} className="nums rounded border border-line px-1.5 py-0.5 text-bid transition-colors duration-100 hover:border-bid" title="use best bid">
+                <button type="button" onClick={() => setPrice(bestBid.toString())} className="nums inline-flex min-h-[24px] items-center rounded border border-line px-2 py-1 text-bid transition-colors duration-100 hover:border-bid" title="use best bid">
                   bid {bestBid.toString()}
                 </button>
               )}
               {bestAsk !== undefined && (
-                <button type="button" onClick={() => setPrice(bestAsk.toString())} className="nums rounded border border-line px-1.5 py-0.5 text-ask transition-colors duration-100 hover:border-ask" title="use best ask">
+                <button type="button" onClick={() => setPrice(bestAsk.toString())} className="nums inline-flex min-h-[24px] items-center rounded border border-line px-2 py-1 text-ask transition-colors duration-100 hover:border-ask" title="use best ask">
                   ask {bestAsk.toString()}
                 </button>
               )}
@@ -119,7 +119,7 @@ export function Trade({ actor, book, onDone }: { actor: Actor | null; book: { as
         )}
 
         <button
-          disabled={busy || !price || !size || !actor || (tab === "place" && preview?.kind === "warn")}
+          disabled={busy || !actor || !preview || (tab === "place" && preview.kind === "warn")}
           aria-busy={busy}
           onClick={tab === "place" ? doPlace : doTake}
           className="flex w-full items-center justify-center gap-2 rounded-lg bg-brand py-2.5 text-sm font-medium text-onbrand transition-colors duration-100 hover:bg-brand-hi active:translate-y-px disabled:pointer-events-none disabled:opacity-40"
@@ -129,7 +129,7 @@ export function Trade({ actor, book, onDone }: { actor: Actor | null; book: { as
         </button>
 
         {toast && (
-          <div className={`rounded-lg border px-3 py-2 text-xs ${toast.kind === "ok" ? "border-bid/40 text-bid" : toast.kind === "err" ? "border-ask/40 text-ask" : "border-line text-muted"}`}>
+          <div role="status" aria-live="polite" className={`rounded-lg border px-3 py-2 text-xs ${toast.kind === "ok" ? "border-bid/40 text-bid" : toast.kind === "err" ? "border-ask/40 text-ask" : "border-line text-muted"}`}>
             {toast.msg}
             {toast.sig && <> · <a className="underline hover:text-fg" href={explorerTx(toast.sig)} target="_blank" rel="noreferrer">tx ↗</a></>}
           </div>

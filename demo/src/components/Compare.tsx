@@ -1,12 +1,12 @@
 import { Check, X } from "lucide-react";
 
 const ROWS: { dim: string; slab: string; torna: string }[] = [
-  { dim: "On-chain state", slab: "One giant slab account", torna: "One small account per node" },
-  { dim: "Concurrent writes", slab: "Serialized, every write locks the slab", torna: "Parallel, disjoint keys, disjoint accounts" },
-  { dim: "Reading the book", slab: "Off-chain indexer you run + maintain", torna: "Walk the tree off-chain via the SDK" },
+  { dim: "On-chain state", slab: "One slab account per side", torna: "One small account per node" },
+  { dim: "Concurrent writes", slab: "Serialized, each side's slab is one lock", torna: "Parallel across disjoint leaves" },
+  { dim: "Reading the book", slab: "Typically an off-chain indexer for usable reads", torna: "Walk the tree off-chain via the SDK" },
   { dim: "Ordering", slab: "Sorted, but one write lock", torna: "Always sorted (B+ tree invariant)" },
   { dim: "Account budget", slab: "Whole slab loaded per tx", torna: "~3 node accounts per op (height ~3)" },
-  { dim: "What you write", slab: "Allocator + indexer + matching", torna: "index<K,V>, accounts resolved for you" },
+  { dim: "Index plumbing you write", slab: "Slab layout + allocator + indexer", torna: "index<K,V>, accounts resolved for you" },
 ];
 
 export function Compare() {

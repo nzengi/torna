@@ -284,7 +284,7 @@ function TreeView({ header, leaves, side }: { header: Header; leaves: Leaf[]; si
   const startX = (W - rowW) / 2;
   const leafCx = (i: number) => startX + i * (boxW + gap) + boxW / 2;
   return (
-    <svg viewBox={`0 0 ${W} ${leafY + 72}`} className="w-full" role="img" aria-label={`${side} tree structure: header, root, and ${leaves.length} leaves`}>
+    <svg viewBox={`0 0 ${W} ${leafY + 72}`} width={W} className="block h-auto max-w-none" role="img" aria-label={`${side} tree structure: header, root, and ${leaves.length} leaves`}>
       <rect x={cx - 95} y={10} width={190} height={46} rx={8} fill="var(--panel)" stroke="var(--brand)" strokeWidth={1.4} />
       <text x={cx} y={31} textAnchor="middle" fontSize="12.5" fontWeight="600" fill="var(--fg)">Tree header</text>
       <text x={cx} y={46} textAnchor="middle" fontSize="10" fill="var(--muted)">height {header.height} · fanout {header.fanout} · root #{header.root.toString()}</text>
@@ -442,6 +442,7 @@ export function Explorer() {
 
   // resolve a pasted address into a decoded account view
   const pasted = useMemo(() => { try { return q.trim().length >= 32 ? new PublicKey(q.trim()) : null; } catch { return null; } }, [q]);
+  const invalidAddr = q.trim().length >= 32 && !pasted;
   useEffect(() => {
     if (!pasted) { setDecoded(null); return; }
     let alive = true;
@@ -486,6 +487,8 @@ export function Explorer() {
         </div>
       )}
 
+      {invalidAddr && <div className="rounded-lg border border-serial/40 bg-serial/[0.06] px-4 py-3 text-sm text-serial">That is not a valid base58 address; filtering orders by it instead.</div>}
+
       {error && <div className="rounded-lg border border-ask/40 bg-ask/5 px-4 py-3 text-sm text-ask">RPC error: {error}</div>}
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -503,18 +506,20 @@ export function Explorer() {
       <div>
         <div className="mb-3 flex items-center gap-2">
           <div className="flex rounded-lg border border-line p-0.5 text-sm">
-            <button onClick={() => setTab("ask")} className={`flex items-center gap-1.5 rounded-md px-3 py-1 transition-colors duration-100 ${tab === "ask" ? "bg-panel-hi font-medium text-ask" : "text-muted hover:text-fg"}`}><ArrowDownUp className="h-3.5 w-3.5" aria-hidden /> Ask tree</button>
-            <button onClick={() => setTab("bid")} className={`flex items-center gap-1.5 rounded-md px-3 py-1 transition-colors duration-100 ${tab === "bid" ? "bg-panel-hi font-medium text-bid" : "text-muted hover:text-fg"}`}><Boxes className="h-3.5 w-3.5" aria-hidden /> Bid tree</button>
+            <button onClick={() => setTab("ask")} aria-pressed={tab === "ask"} className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 transition-colors duration-100 ${tab === "ask" ? "bg-panel-hi font-medium text-ask" : "text-muted hover:text-fg"}`}><ArrowDownUp className="h-3.5 w-3.5" aria-hidden /> Ask tree</button>
+            <button onClick={() => setTab("bid")} aria-pressed={tab === "bid"} className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 transition-colors duration-100 ${tab === "bid" ? "bg-panel-hi font-medium text-bid" : "text-muted hover:text-fg"}`}><Boxes className="h-3.5 w-3.5" aria-hidden /> Bid tree</button>
           </div>
           <span className="text-xs text-faint">{tab === "ask" ? "ascending price" : "descending price"}</span>
         </div>
         {side ? (
           <div className="space-y-3">
             <HeaderStats h={side.header} />
-            <div className="rounded-xl border border-line bg-panel p-5"><TreeView header={side.header} leaves={side.leaves} side={tab} /></div>
+            <div className="overflow-x-auto rounded-xl border border-line bg-panel p-5"><TreeView header={side.header} leaves={side.leaves} side={tab} /></div>
             <LeafTable leaves={side.leaves} />
             <OrdersTable orders={filtered} side={tab} />
           </div>
+        ) : loading ? (
+          <div className="rounded-xl border border-line bg-panel p-6 text-center text-sm text-faint">reading the tree on-chain...</div>
         ) : (
           <div className="rounded-xl border border-line bg-panel p-6 text-center text-sm text-faint">tree not found</div>
         )}

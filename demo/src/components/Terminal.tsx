@@ -147,7 +147,7 @@ export function Terminal() {
           </div>
         </div>
         {msg && (
-          <p className="mt-3 border-t border-line pt-3 text-xs text-muted">
+          <p role="status" aria-live="polite" className="mt-3 border-t border-line pt-3 text-xs text-muted">
             {msg.text}
             {msg.sig && <> · <a className="text-brand underline hover:text-brand-hi" href={explorerTx(msg.sig)} target="_blank" rel="noreferrer">view transaction</a></>}
           </p>
@@ -164,9 +164,10 @@ export function Terminal() {
                 <button
                   key={d.pubkey}
                   onClick={() => { setMode("demo"); setIdIdx(i); }}
+                  aria-pressed={mode === "demo" && i === idIdx}
                   className={`flex items-center gap-2.5 rounded-lg border px-3 py-2 transition-colors duration-100 active:translate-y-px ${mode === "demo" && i === idIdx ? "border-brand bg-brand/5" : "border-line hover:border-muted"}`}
                 >
-                  <span className="flex h-7 w-7 items-center justify-center rounded-full border text-[11px] font-semibold" style={{ background: `color-mix(in srgb, ${TRADER_COLORS[i % 4]} 22%, var(--panel))`, borderColor: TRADER_COLORS[i % 4], color: TRADER_COLORS[i % 4] }}>{i + 1}</span>
+                  <span className="flex h-7 w-7 items-center justify-center rounded-full border text-[11px] font-semibold text-fg" style={{ background: `color-mix(in srgb, ${TRADER_COLORS[i % 4]} 26%, var(--panel))`, borderColor: TRADER_COLORS[i % 4] }}>{i + 1}</span>
                   <span className="text-left leading-tight">
                     <span className="block text-sm font-medium text-fg">Trader {i + 1}</span>
                     <span className="nums block text-[11px] text-faint">{shorten(d.pubkey)}</span>
@@ -175,6 +176,7 @@ export function Terminal() {
               ))}
               <button
                 onClick={() => { if (connected) setMode("wallet"); else modal.setVisible(true); }}
+                aria-pressed={useWalletAct}
                 className={`flex items-center gap-2.5 rounded-lg border px-3 py-2 transition-colors duration-100 active:translate-y-px ${useWalletAct ? "border-brand bg-brand/5" : "border-line hover:border-muted"}`}
               >
                 <span className="flex h-7 w-7 items-center justify-center rounded-full bg-brand/15"><Wallet className="h-3.5 w-3.5 text-brand" aria-hidden /></span>

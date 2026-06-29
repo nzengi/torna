@@ -111,11 +111,11 @@ const tree = new Tree(program, creator, 1);
 const key = keys.orderKey(keys.Side.Ask, 100n, 0n, maker, 1n);
 const value = orderValue;
 
-// the hot path needs an existing leaf, so the first insert into a fresh tree uses the
-// cold tree.insertIx (it bootstraps and splits); after that, the hot path applies:
-const ix = await tree.insertFastIx(reader, authority, key, value);
-if (!ix) throw new Error("empty or full leaf - use tree.insertIx (cold)");
-await sendAndConfirmTransaction(connection, new Transaction().add(ix), [signer]);
+// the first insert into a fresh tree uses the cold path (it bootstraps the tree and splits):
+const ix = await tree.insertIx(reader, payer, key, value, rentNode);
+await sendAndConfirmTransaction(connection, new Transaction().add(ix), [payer]);
+
+// once leaves exist, writes go hot (header read-only, leaf-only, so they run in parallel); see Write
 
 // read it back: no transaction, no fee
 const top = await tree.best(reader);`}</Code>}
@@ -138,11 +138,9 @@ let tree = Tree::new(program, creator, 1);
 let key = keys::order_key(keys::Side::Ask, 100, 0, &maker, 1);
 let value = order_value;
 
-// the hot path needs an existing leaf; the first insert into a fresh tree uses the
-// cold tree.insert_ix (it bootstraps and splits), then switch to the hot path:
-let ix = tree.insert_fast_ix(&reader, authority, &key, &value)
-    .expect("empty or full leaf - use tree.insert_ix (cold)");
-// send \`ix\` with your client...
+// the first insert into a fresh tree uses the cold path (it bootstraps the tree and splits):
+let ix = tree.insert_ix(&reader, payer, &key, &value, rent_node);
+// send \`ix\` with your client; once leaves exist, writes go hot (see Write)
 
 // read it back: no transaction, no fee
 let top = tree.best(&reader);`}</Code>}
@@ -201,16 +199,16 @@ if let Some((_key, value)) = top {
               <H id="cold">When a leaf splits</H>
               <P>A hot insert into a full leaf returns error 102. Fall back to the cold path, which splits the leaf and grows the tree; subsequent inserts at that depth go hot again.</P>
               <DualCode
-                ts={<Code lang="typescript">{`import { ERR_NEED_SPLIT_SLOT } from "torna-sdk"; // === 102
+                ts={<Code lang="typescript">{`import { ERR_NEED_SPLIT_SLOT } from "torna-sdk"; // 102, surfaced on-chain as 0x66
 
-const sendIx = (ix) => sendAndConfirmTransaction(connection, new Transaction().add(ix), [signer]);
+const sendIx = (ix: TransactionInstruction) =>
+  sendAndConfirmTransaction(connection, new Transaction().add(ix), [signer]);
 
 try {
-  const ix = await tree.insertFastIx(reader, authority, key, value);
-  if (!ix) throw new Error(String(ERR_NEED_SPLIT_SLOT)); // empty tree, no leaf yet
-  await sendIx(ix);
+  await sendIx(await tree.insertFastIx(reader, authority, key, value));
 } catch (e) {
-  if (String(e).includes(String(ERR_NEED_SPLIT_SLOT))) {
+  // a full leaf makes the engine return custom error 0x66 (ERR_NEED_SPLIT_SLOT)
+  if (String(e).includes("0x" + ERR_NEED_SPLIT_SLOT.toString(16))) {
     // cold path: the maker pays spare-node rent; the engine splits the leaf
     await sendIx(await tree.insertIx(reader, payer, key, value, rentNode));
   } else throw e;
@@ -257,9 +255,10 @@ function scoreKey(score: bigint, player: PublicKey): Uint8Array {
   return k;
 }
 
+// created once with value_size = 32 (the value is a 32-byte pubkey)
 const board = new Tree(program, creator, /* treeId */ 7);
 
-// submit a score (value = the player); many players write in parallel
+// submit a score (value = the player); the first insert bootstraps via board.insertIx
 const ix = await board.insertFastIx(reader, authority, scoreKey(score, player), player.toBytes());
 
 // read the top 10, off-chain, no transaction
@@ -275,6 +274,7 @@ fn score_key(score: u64, player: &Pubkey) -> [u8; 32] {
     k
 }
 
+// created once with value_size = 32 (the value is a 32-byte pubkey)
 let board = Tree::new(program, creator, /* tree_id */ 7);
 
 // submit a score (value = the player); many players write in parallel

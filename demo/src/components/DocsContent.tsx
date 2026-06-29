@@ -350,7 +350,7 @@ const first = await tree.insertIx(reader, payer, key, value, rentNode);
 
 // once a leaf exists, the hot path writes it: header read-only, only the leaf writable -> parallel
 const ix = await tree.insertFastIx(reader, authority, key, value);
-// insertFastIx returns null and the engine returns 102 on a full leaf; fall back to insertIx`}</Code>
+// on a full leaf the engine returns 0x66 (102); fall back to the cold tree.insertIx`}</Code>
       </section>
 
       <section>
@@ -418,7 +418,7 @@ const ix = await tree.insertFastIx(reader, authority, key, value);
         <P>
           Derived: an empty tree is <span className="nums text-fg">~0.003 SOL</span> (header + allocator);
           standing up a full market (two trees + two vaults + config) is{" "}
-          <span className="nums text-fg">~0.024 SOL</span> plus any new mints. A resting entry is one slot
+          <span className="nums text-fg">~0.013 SOL</span> (before any nodes) plus any new mints. A resting entry is one slot
           in an existing leaf, not a new account, so its marginal rent is the leaf rent amortized over the
           fanout, roughly <span className="nums text-fg">0.0005 SOL</span> at fanout 64, reclaimed when the
           leaf later merges. The recurring per-transaction cost is just the ~5000-lamport (0.000005 SOL)
@@ -610,7 +610,8 @@ export function DexDocs() {
         <P>
           The inner <span className="nums text-fg">Program {MARKET.tornaProgramId.slice(0, 4)}... invoke [2]</span> line
           is the Torna engine running InsertFast as a CPI from the book authority PDA, consuming roughly 3k
-          compute units; the whole place costs ~11k CU and a 5000-lamport fee.
+          compute units (below the CU table's worst cases, since this tree is shallow with a small value);
+          the whole place costs ~11k CU and a 5000-lamport fee.
         </P>
       </section>
 

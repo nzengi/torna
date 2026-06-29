@@ -117,7 +117,7 @@ export default function ResearchPage() {
               book in a single large account (often, though not always, with an off-chain crank), which
               serializes writes and, where a crank is used, adds a liveness dependency. We
               formalize the three scarce resources that bound any design, walk the design space we
-              explored and rejected, present Torna, and evaluate it: a measured 4.6 to 7x throughput gain
+              explored and rejected, present Torna, and evaluate it: a measured 4.6 to 7.1x throughput gain
               for disjoint versus contended writes on a real validator banking stage, single-key hot
               operations under the 200k compute-unit default even at fanout 128, and a correctness regimen
               of an 8,000-operation on-chain differential, 60k-iteration fuzzing, and five rounds of
@@ -280,7 +280,7 @@ export default function ResearchPage() {
               For the order-book instantiation, one 32-byte key encodes price-time priority directly, so
               the tree is the sorted book with no secondary index. The price occupies the high bytes
               big-endian so byte order matches numeric order; a writer-unique tail (maker and nonce)
-              breaks ties so two makers at the same price are vanishingly unlikely to collide, and do not serialize on each other.
+              breaks ties so two makers at the same price are vanishingly unlikely to collide on a key; they still share a leaf, so they do not run in parallel, but neither overwrites the other.
             </P>
             <div className="mt-5"><OrderKey /></div>
 
@@ -303,7 +303,7 @@ export default function ResearchPage() {
               that the design rested on measurements rather than hope.
             </P>
             <ul className="mt-4 space-y-2 text-[15px] text-muted">
-              <li><span className="font-medium text-fg">Does fanout bind on compute?</span> A leaf-engine CU sweep showed even a fanout-128 worst-case insert costs about 27k CU, far under the budget, so compute does not bind fanout. The binding resource is the account budget, which is what sets fanout to 64 by default and 128 for large trees.</li>
+              <li><span className="font-medium text-fg">Does fanout bind on compute?</span> A CU sweep showed the fanout-128 insert stays well under the budget; the eval table puts the hot-path InsertFast at 43k and a splitting insert at 68k, both inside the 200k default. So compute does not bind fanout. The binding resource is the account budget, which is what sets fanout to 64 by default and 128 for large trees.</li>
               <li><span className="font-medium text-fg">Does the runtime actually parallelize this?</span> A saturation benchmark on a real single-node validator, not a simulator, confirmed that disjoint-leaf writes commit several times more transactions per slot than contended ones (Section 7).</li>
               <li><span className="font-medium text-fg">Does composability survive a CPI?</span> A caller program that drives InsertFast as a PDA authority kept the parallel property, so an integrating program loses nothing.</li>
               <li><span className="font-medium text-fg">What is the read and return-data envelope?</span> Spikes pinned the 1,024-byte return-data ceiling and the cost of emitting it, which shaped the read instructions.</li>
@@ -418,7 +418,8 @@ export default function ResearchPage() {
             <P>
               For a concrete end-to-end figure, an actual order placement captured on devnet cost{" "}
               <span className="nums text-fg">{tx.compute_units_consumed?.toLocaleString()}</span> compute
-              units total, of which the inner engine InsertFast was roughly 3k, with a 5000-lamport fee.
+              units total, of which the inner engine InsertFast was roughly 3k, below the table's worst-case
+              figures because this tree is shallow with a small value, and a 5000-lamport fee.
             </P>
 
             <P className="mt-8">
@@ -438,7 +439,8 @@ export default function ResearchPage() {
             <P className="mt-8">
               <span className="font-medium text-fg">Economics.</span> Rent is a refundable deposit, not a
               fee, and is reclaimed when an account is closed. An empty tree is about 0.003 SOL; a full
-              market is about 0.024 SOL; a resting entry is a slot in an existing leaf, so its marginal
+              market (two empty trees, two vaults, and config, before any nodes) is about 0.013 SOL; a
+              resting entry is a slot in an existing leaf, so its marginal
               rent is the leaf rent amortized over the fanout, roughly 0.0005 SOL at fanout 64, reclaimed on
               merge. The recurring per-transaction cost is just the network fee; new node accounts are
               created only on a split.

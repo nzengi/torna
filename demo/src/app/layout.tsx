@@ -12,7 +12,7 @@ export const metadata: Metadata = {
   metadataBase: new URL("https://torna.vercel.app"),
   title: "Torna, a parallel ordered on-chain index for Solana",
   description:
-    "Torna is the first parallel, ordered, on-chain index primitive for Solana: a sorted B+ tree where every node is its own account, so writes at different keys run in the same slot. Build order books, queues, leaderboards, and governance on it. TornaDEX is the live reference order book.",
+    "Torna is a parallel, ordered, on-chain index primitive for Solana: a sorted B+ tree where every node is its own account, so writes to different leaves run in the same slot. Build order books, queues, leaderboards, and governance on it. TornaDEX is the live reference order book.",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {

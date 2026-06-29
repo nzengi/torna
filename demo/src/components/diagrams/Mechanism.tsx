@@ -33,20 +33,20 @@ export function Mechanism() {
     <path d={`M${x1},${y1} C${x1},${(y1 + y2) / 2} ${x2},${(y1 + y2) / 2} ${x2},${y2}`} fill="none" stroke={LINE} strokeWidth={1.4} />
   );
   return (
-    <svg viewBox="0 0 760 340" className="w-full" role="img" aria-label="The same three makers: a single-account book serializes them across three slots, while Torna's one-node-per-account layout commits all three in one slot">
+    <svg viewBox="0 0 760 340" className="w-full min-w-[660px]" role="img" aria-label="Three makers whose prices fall in different leaves: a single-slab book serializes them across three slots, while Torna's one-account-per-leaf layout commits all three in one slot">
       <line x1={380} y1={20} x2={380} y2={324} stroke={LINE} strokeWidth={1} strokeDasharray="3 4" />
 
       {/* ===== LEFT: the classic single-account book (serial) ===== */}
       <text x={180} y={18} textAnchor="middle" fontSize="12" fontWeight="700" fill={SER}>The usual book</text>
-      <text x={180} y={33} textAnchor="middle" fontSize="10" fill={FAINT}>one big account for everything</text>
+      <text x={180} y={33} textAnchor="middle" fontSize="10" fill={FAINT}>one slab account per side</text>
       <Maker x={60} y={70} price="100" color={SER} />
-      <Maker x={180} y={70} price="105" color={SER} />
-      <Maker x={300} y={70} price="110" color={SER} />
+      <Maker x={180} y={70} price="180" color={SER} />
+      <Maker x={300} y={70} price="260" color={SER} />
       {/* all three converge to the single account */}
       {drop(60, 79, 180, 132)}
       {drop(180, 79, 180, 132)}
       {drop(300, 79, 180, 132)}
-      <Box x={108} y={132} w={144} title="one account" sub="the slab" color={SER} />
+      <Box x={108} y={132} w={144} title="one slab" sub="one account, one lock" color={SER} />
       {/* three stacked slots */}
       {drop(180, 170, 180, 200)}
       {[0, 1, 2].map((i) => (
@@ -61,10 +61,10 @@ export function Mechanism() {
 
       {/* ===== RIGHT: Torna, one node per account (parallel) ===== */}
       <text x={580} y={18} textAnchor="middle" fontSize="12" fontWeight="700" fill={PAR}>Torna</text>
-      <text x={580} y={33} textAnchor="middle" fontSize="10" fill={FAINT}>one node per account</text>
+      <text x={580} y={33} textAnchor="middle" fontSize="10" fill={FAINT}>prices that fall in different leaves</text>
       <Maker x={460} y={70} price="100" color={PAR} />
-      <Maker x={580} y={70} price="105" color={PAR} />
-      <Maker x={700} y={70} price="110" color={PAR} />
+      <Maker x={580} y={70} price="180" color={PAR} />
+      <Maker x={700} y={70} price="260" color={PAR} />
       {/* each maker straight down to its own leaf */}
       {drop(460, 79, 460, 132)}
       {drop(580, 79, 580, 132)}
