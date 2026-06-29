@@ -1,0 +1,24 @@
+{
+  "name": "@torna/sdk",
+  "version": "0.1.0",
+  "description": "Torna client SDK (TypeScript) -- the PathPlanner. Mirrors the Rust torna-sdk against the frozen ABI.",
+  "license": "MIT",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": ["dist", "src"],
+  "scripts": {
+    "build": "tsc",
+    "test": "node --import tsx --test test/*.test.ts"
+  },
+  "peerDependencies": {
+    "@solana/web3.js": "^1.95.0"
+  },
+  "devDependencies": {
+    "@solana/web3.js": "^1.95.0",
+    "@types/node": "^22.0.0",
+    "solana-bankrun": "^0.4.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0"
+  }
+}

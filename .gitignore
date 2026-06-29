@@ -9,3 +9,5 @@ sdk/target/
 cpi/target/
 cpi-probe/target/
 orderbook/target/
+ts-sdk/node_modules/
+ts-sdk/dist/

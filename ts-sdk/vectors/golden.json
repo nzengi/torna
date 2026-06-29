@@ -1,0 +1,9 @@
+{
+  "program": "4vJ9JU1bJJE96FWSJKvHsmmFADCg4gpZQff4P3bkLKi",
+  "creator": "8qbHbw2BbbTHBW1sbeqakYXVKRQM8Ne7pLK7m6CVfeR",
+  "maker": "CktRuQ2mttgRGkXJtyksdKHjUdc2C4TgDzyB98oEzy8",
+  "treeId": 7,
+  "orderKeys": [{"side":0,"price":100,"slot":5,"nonce":0,"hex":"0000000000000064000000000000000503030303030303030000000000000000"},{"side":0,"price":200,"slot":5,"nonce":0,"hex":"00000000000000c8000000000000000503030303030303030000000000000000"},{"side":0,"price":100,"slot":1,"nonce":9,"hex":"0000000000000064000000000000000103030303030303030000000000000009"},{"side":1,"price":100,"slot":5,"nonce":0,"hex":"ffffffffffffff9b000000000000000503030303030303030000000000000000"},{"side":1,"price":200,"slot":5,"nonce":0,"hex":"ffffffffffffff37000000000000000503030303030303030000000000000000"},{"side":1,"price":999,"slot":0,"nonce":3,"hex":"fffffffffffffc18000000000000000003030303030303030000000000000003"}],
+  "pdas": { "header": "69vuCHWgcCPUiAGFL9fV6rDoxT7LLXCshb5S2WEu3zTq", "alloc": "HfXsMGBUBHPo1wiszx45Sjg3r39ZtZfNr3rx1WbXBmmb", "node3": "d2ct7VeqvJFNSGn2u6SnrfbJ8oJfHsr4eYkWR8Maynq" },
+  "initTreeIx": { "valueSize": 40, "fanout": 8, "rentHdr": 1000, "rentAlloc": 500, "dataHex": "0007000000ffff28000800e803000000000000f401000000000000", "accounts": ["CktRuQ2mttgRGkXJtyksdKHjUdc2C4TgDzyB98oEzy8","69vuCHWgcCPUiAGFL9fV6rDoxT7LLXCshb5S2WEu3zTq","HfXsMGBUBHPo1wiszx45Sjg3r39ZtZfNr3rx1WbXBmmb","11111111111111111111111111111111"] }
+}

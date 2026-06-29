@@ -18,7 +18,7 @@ BUILD    = build
 
 SBF_SDK := $(HOME)/.local/share/solana/install/active_release/bin/platform-tools-sdk/sbf
 
-.PHONY: all test test-asan sbf probe cpi-probe orderbook integration diff fuzz cu clean
+.PHONY: all test test-asan sbf probe cpi-probe orderbook integration diff fuzz cu ts clean
 
 all: test sbf integration diff fuzz cu
 
@@ -51,6 +51,13 @@ integration: sbf probe cpi-probe orderbook
 	cd integration && ./target/debug/sdktest
 	cd integration && ./target/debug/obtest
 	cd integration && ./target/debug/alttest
+
+# TypeScript client SDK: regenerate golden vectors from the Rust SDK, then run the TS
+# tests -- golden-vector byte-equivalence vs the Rust SDK + bankrun e2e vs torna.so.
+# Needs node + npm (deps fetched on first run). Not in `all` (keeps `all` engine-only).
+ts: sbf
+	cd sdk && cargo run --bin golden --offline > ../ts-sdk/vectors/golden.json
+	cd ts-sdk && npm install --silent && npm run build && npm test
 
 # exhaustive on-chain differential vs an oracle (validates the SBF wrapper; ~70s)
 diff: sbf
